@@ -370,3 +370,91 @@ class Mesure(models.Model):
 
     def __str__(self):
         return f"{self.colonie} — {self.critere} ({self.date_mesure})"
+
+
+# ---------------------------------------------------------------------------
+# Vues PostgreSQL en lecture seule (créées par migration RunSQL, cf.
+# selection/migrations/0002_vues_sql.py). Ces modèles ne créent ni ne
+# modifient de table (managed = False) : ce sont des vues, à faire évoluer
+# uniquement via migration, jamais à la main dans pgAdmin.
+# ---------------------------------------------------------------------------
+
+class VueMesureComplete(models.Model):
+    """Une ligne par mesure, jointure Colonie→Ruche→Rucher/Reine/Critère/
+    PoidsCritere/Campagne aplatie (vue SQL `vue_mesures_completes`)."""
+
+    mesure_id = models.BigIntegerField(primary_key=True)
+    date_mesure = models.DateField()
+    valeur_brute = models.CharField(max_length=100)
+    score = models.PositiveSmallIntegerField(null=True)
+    colonie_id = models.BigIntegerField()
+    rucher_id = models.BigIntegerField(null=True)
+    rucher_nom = models.CharField(max_length=100, null=True)
+    ruche_id = models.BigIntegerField()
+    ruche_identifiant = models.CharField(max_length=140)
+    reine_id = models.BigIntegerField(null=True)
+    reine_identifiant = models.CharField(max_length=50, null=True)
+    critere_id = models.BigIntegerField()
+    critere_code = models.SlugField(max_length=50)
+    critere_nom = models.CharField(max_length=100)
+    campagne_id = models.BigIntegerField(null=True)
+    campagne_nom = models.CharField(max_length=100, null=True)
+    poids = models.PositiveSmallIntegerField(null=True)
+    seuil_eliminatoire = models.DecimalField(
+        max_digits=6, decimal_places=2, null=True,
+    )
+
+    class Meta:
+        managed = False
+        db_table = "vue_mesures_completes"
+        verbose_name = "Mesure complète (vue)"
+        verbose_name_plural = "Mesures complètes (vue)"
+
+    def __str__(self):
+        return f"{self.critere_nom} — colonie #{self.colonie_id} ({self.date_mesure})"
+
+
+class VueColonieActive(models.Model):
+    """Colonies actives + Ruche/Rucher/Reine actuelle, un état courant par
+    ligne (vue SQL `vue_colonies_actives`)."""
+
+    colonie_id = models.BigIntegerField(primary_key=True)
+    mode_creation = models.CharField(max_length=20)
+    date_creation = models.DateField()
+    ruche_id = models.BigIntegerField()
+    ruche_identifiant = models.CharField(max_length=140)
+    rucher_id = models.BigIntegerField(null=True)
+    rucher_nom = models.CharField(max_length=100, null=True)
+    reine_id = models.BigIntegerField(null=True)
+    reine_identifiant = models.CharField(max_length=50, null=True)
+
+    class Meta:
+        managed = False
+        db_table = "vue_colonies_actives"
+        verbose_name = "Colonie active (vue)"
+        verbose_name_plural = "Colonies actives (vue)"
+
+    def __str__(self):
+        return f"Colonie #{self.colonie_id} ({self.ruche_identifiant})"
+
+
+class VueGenealogieReine(models.Model):
+    """Chaîne mère → grand-mère → ... pour chaque reine, avec le niveau de
+    génération (0 = la reine elle-même). Requête récursive WITH RECURSIVE
+    (vue SQL `vue_genealogie_reines`)."""
+
+    id = models.BigIntegerField(primary_key=True)
+    reine_id = models.BigIntegerField()
+    reine_identifiant = models.CharField(max_length=50)
+    ancetre_id = models.BigIntegerField()
+    ancetre_identifiant = models.CharField(max_length=50)
+    generation = models.PositiveIntegerField()
+
+    class Meta:
+        managed = False
+        db_table = "vue_genealogie_reines"
+        verbose_name = "Généalogie de reine (vue)"
+        verbose_name_plural = "Généalogies de reines (vue)"
+
+    def __str__(self):
+        return f"{self.reine_identifiant} <- {self.ancetre_identifiant} (gen {self.generation})"
