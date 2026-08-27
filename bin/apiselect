@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+#
+# apiselect — lance le serveur de développement Django d'ApiSelect et
+# ouvre automatiquement le navigateur sur /admin/, depuis n'importe
+# quel répertoire courant.
+#
+# Installation (accès global) : lien symbolique dans un dossier du
+# PATH, ex. ~/bin/apiselect -> ~/ApiSelect/bin/apiselect
+#
+# Usage : apiselect
+# Ctrl+C arrête proprement le serveur (pas de processus orphelin).
+
+set -euo pipefail
+
+PROJECT_DIR="/home/alain/ApiSelect"
+HOST="127.0.0.1"
+PORT="8000"
+URL="http://${HOST}:${PORT}/admin/"
+
+cd "$PROJECT_DIR"
+# shellcheck source=/dev/null
+source "$PROJECT_DIR/venv/bin/activate"
+
+# --noreload : évite que Django ne forke un second processus (le
+# rechargeur automatique), pour pouvoir arrêter proprement avec un
+# simple kill du PID ci-dessous.
+python manage.py runserver "${HOST}:${PORT}" --noreload &
+SERVER_PID=$!
+
+cleanup() {
+    if kill -0 "$SERVER_PID" 2>/dev/null; then
+        kill "$SERVER_PID" 2>/dev/null || true
+        wait "$SERVER_PID" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT INT TERM
+
+# Attend que le serveur réponde sur le port (jusqu'à ~5s), sinon
+# se rabat sur un délai fixe.
+ready=0
+for _ in $(seq 1 25); do
+    if (exec 3<>"/dev/tcp/${HOST}/${PORT}") 2>/dev/null; then
+        exec 3<&- 3>&- 2>/dev/null || true
+        ready=1
+        break
+    fi
+    sleep 0.2
+done
+[ "$ready" -eq 1 ] || sleep 2
+
+# Module webbrowser de Python (portable Linux/Windows/Mac).
+python3 -m webbrowser -t "$URL" || true
+
+wait "$SERVER_PID"
