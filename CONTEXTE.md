@@ -4,8 +4,9 @@
 Outil de gestion d'un rucher orienté élevage de reines et sélection
 sur critères mesurables. Usage bureau (saisie le soir, pas mobile/
 terrain, propolis/gants). Utilisateur unique. Python/Django,
-PostgreSQL, admin Django (saisie par lot), WeasyPrint (PDF), calendrier
-(FullCalendar ou vue custom).
+PostgreSQL, admin Django (saisie par lot), xhtml2pdf (PDF, pure
+Python — portable Linux/Windows sans dépendance système, préféré à
+WeasyPrint pour cette raison), calendrier (FullCalendar ou vue custom).
 
 ## Vocabulaire — distinctions du modèle
 (l'utilisateur mélange ces termes à l'oral ; la rigueur vient du code)
@@ -29,9 +30,8 @@ PostgreSQL, admin Django (saisie par lot), WeasyPrint (PDF), calendrier
   configurable si l'outil est partagé (ex. "Ruche" = boîte pour
   certains, = colonie pour d'autres).
 - **Principe** : l'alias est un habillage d'affichage, jamais un
-  identifiant fonctionnel. Recherche/liens/actions interrogent
-  toujours les champs structurés (type+numéro, id), jamais le texte
-  affiché — un alias différent ne doit jamais casser une fonction.
+  identifiant fonctionnel — recherche/liens/actions utilisent
+  toujours les champs structurés (type+numéro, id).
 
 ## Documents de référence (locaux, non versionnés)
 `Cours_Apiculture/`, gitignoré (droits d'auteur, dépôt public) :
@@ -58,17 +58,17 @@ Reprend la logique de l'ODS (dates en cascade depuis une ponte ou un
 picking : starter, picking, finisseur, couveuse, ruchettes,
 libération, contrôle naissance, ponte). Plusieurs campagnes en
 parallèle (multi-lignées, multi-sites), saturation de mâles (~16j
-avant la ponte des reines). Deux vues : calendrier mois/semaine
+avant ponte des reines). Deux vues : calendrier mois/semaine
 (campagnes superposées) + liste de tâches toutes campagnes confondues.
 
 ## Fiches de terrain
 Bouton générant un PDF imprimable (fiche rapide + approfondie),
 header pré-rempli (date, ruchers, colonies + lignée). Brouillon pour
-la saisie du soir dans le même écran.
+la saisie du soir.
 
 ## État d'avancement
 Django initialisé (modèle, admin, 3 vues PostgreSQL en lecture, index
 pondéré testé). CritereSelection vide (9 critères à peupler). Aucune
 donnée réelle saisie (2 colonies en attente de visite). Issue en
-cours : table TypeRuche + alias (remplace TextChoices en dur). Suite :
-tableau de résultats trié, calendrier, fiches PDF.
+cours : table TypeRuche + alias. Suite : tableau de résultats trié,
+calendrier, fiches PDF (xhtml2pdf).
