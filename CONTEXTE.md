@@ -59,6 +59,14 @@ libération, contrôle naissance, ponte). Plusieurs campagnes en
 parallèle (multi-lignées, multi-sites), saturation de mâles (~16j
 avant ponte des reines). Deux vues : calendrier mois/semaine
 (campagnes superposées) + liste de tâches toutes campagnes confondues.
+Implémenté (issue #7) : `CampagneElevage.date_reference` (date de
+ponte) comme unique point de départ saisi par l'utilisateur —
+`EtapeCalendrier` porte les 10 étapes calculées (`selection/calculs.py`
+pour les décalages en jours, `selection/signals.py` pour le recalcul
+automatique). Le décalage des mâles (-16j) n'est pas dans l'ODS
+(principe du cours uniquement) ; l'ODS gère aussi des étapes hors
+scope de l'issue (cupularve, insertion/sortie de la reine, limite de
+longueur de ponte), volontairement non modélisées.
 
 ## Fiches de terrain
 Bouton générant un PDF imprimable (fiche rapide + approfondie),
@@ -69,6 +77,8 @@ la saisie du soir.
 Django initialisé (modèle, admin, 3 vues PostgreSQL en lecture, index
 pondéré testé). TypeRuche en table avec alias (migration 0004),
 éditables depuis l'admin. CritereSelection peuplé (9 critères,
-migration 0005). Aucune donnée réelle saisie (2 colonies en attente
-de visite). Suite : tableau de résultats trié, calendrier, fiches PDF
-(xhtml2pdf).
+migration 0005). Tableau de résultats trié par index (issue #6).
+Calendrier d'élevage multi-campagnes avec dates en cascade calculées
+automatiquement + liste de tâches (issue #7, migration 0006). Aucune
+donnée réelle saisie (2 colonies en attente de visite). Suite : fiches
+PDF (xhtml2pdf).
