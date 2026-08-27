@@ -26,24 +26,54 @@ class Rucher(models.Model):
         return self.nom
 
 
-class TypeRuche(models.TextChoices):
-    DADANT10 = "DADANT10", "Dadant 10"
-    RUCHETTE6 = "RUCHETTE6", "Ruchette 6"
-    APIDEA = "APIDEA", "Apidea"
-    DH = "DH", "DH (double haussette)"
+class TypeRuche(models.Model):
+    """Table de référence des types de ruche (remplace l'ancien TextChoices).
 
+    `alias` est un habillage d'affichage court (ex. "Ruche" pour Dadant 10) ;
+    quand il est vide, l'affichage retombe sur `nom`. Éditable depuis l'admin
+    Django sans migration de code (cf. CONTEXTE.md — l'alias n'est jamais un
+    identifiant fonctionnel).
+    """
 
-# Types dont la numérotation est permanente : Type + numéro = identité
-# stable dans le temps (une planche physique donnée porte toujours le même
-# numéro). Apidea et DH ont une numérotation réutilisable (pas d'identité
-# permanente sur les planches), donc ils sont exclus de cette contrainte.
-TYPES_NUMEROTATION_PERMANENTE = (TypeRuche.DADANT10, TypeRuche.RUCHETTE6)
+    code = models.SlugField(
+        max_length=20, unique=True,
+        help_text="Code technique stable (ex. DADANT10), utilisé en base et "
+                   "par les migrations de données. Ne pas modifier après coup.",
+    )
+    nom = models.CharField(max_length=100, help_text="Nom complet (ex. Dadant 10).")
+    alias = models.CharField(
+        max_length=50, blank=True,
+        help_text="Libellé court pour l'affichage courant (ex. Ruche). "
+                   "Laisser vide pour utiliser le nom complet.",
+    )
+    numerotation_permanente = models.BooleanField(
+        default=False,
+        help_text="Coché si Type + numéro forment une identité stable dans "
+                   "le temps (une planche physique donnée porte toujours le "
+                   "même numéro), comme Dadant 10/Ruchette 6. Décoché pour "
+                   "une numérotation réutilisable sans identité permanente "
+                   "sur les planches, comme Apidea/DH.",
+    )
+
+    class Meta:
+        verbose_name = "Type de ruche"
+        verbose_name_plural = "Types de ruche"
+        ordering = ["nom"]
+
+    def __str__(self):
+        return self.libelle_affichage
+
+    @property
+    def libelle_affichage(self):
+        return self.alias if self.alias else self.nom
 
 
 class Ruche(models.Model):
     """Boîte physique. Type + numéro forment son identité (cf. Meta.clean)."""
 
-    type_ruche = models.CharField(max_length=20, choices=TypeRuche.choices)
+    type_ruche = models.ForeignKey(
+        TypeRuche, on_delete=models.PROTECT, related_name="ruches",
+    )
     numero = models.PositiveIntegerField()
     rucher = models.ForeignKey(
         Rucher, on_delete=models.SET_NULL, null=True, blank=True,
@@ -61,13 +91,13 @@ class Ruche(models.Model):
     class Meta:
         verbose_name = "Ruche"
         verbose_name_plural = "Ruches"
-        ordering = ["type_ruche", "numero"]
+        ordering = ["type_ruche__nom", "numero"]
 
     def __str__(self):
-        return f"{self.get_type_ruche_display()} n°{self.numero}"
+        return f"{self.type_ruche.libelle_affichage} {self.numero}"
 
     def clean(self):
-        if self.type_ruche in TYPES_NUMEROTATION_PERMANENTE:
+        if self.type_ruche_id and self.type_ruche.numerotation_permanente:
             doublons = Ruche.objects.filter(
                 type_ruche=self.type_ruche, numero=self.numero, actif=True,
             )
@@ -75,8 +105,8 @@ class Ruche(models.Model):
                 doublons = doublons.exclude(pk=self.pk)
             if doublons.exists():
                 raise ValidationError(
-                    f"Une ruche active {self.get_type_ruche_display()} "
-                    f"n°{self.numero} existe déjà (numérotation permanente "
+                    f"Une ruche active {self.type_ruche.libelle_affichage} "
+                    f"{self.numero} existe déjà (numérotation permanente "
                     f"pour ce type)."
                 )
 

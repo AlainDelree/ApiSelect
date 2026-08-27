@@ -68,7 +68,8 @@ la saisie du soir.
 
 ## État d'avancement
 Django initialisé (modèle, admin, 3 vues PostgreSQL en lecture, index
-pondéré testé). CritereSelection vide (9 critères à peupler). Aucune
-donnée réelle saisie (2 colonies en attente de visite). Issue en
-cours : table TypeRuche + alias. Suite : tableau de résultats trié,
-calendrier, fiches PDF (xhtml2pdf).
+pondéré testé). TypeRuche transformé en table avec alias (migration 0004),
+alias éditables depuis l'admin sans migration de code. CritereSelection
+vide (9 critères à peupler). Aucune donnée réelle saisie (2 colonies en
+attente de visite). Suite : tableau de résultats trié, calendrier, fiches
+PDF (xhtml2pdf).

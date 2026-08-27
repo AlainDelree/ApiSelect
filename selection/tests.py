@@ -74,11 +74,12 @@ class CalculerIndexTests(TestCase):
 
 class VueColonieActiveLibelleTypeRucheTests(TestCase):
     """Vérifie que `ruche_identifiant`, exposé par la vue SQL
-    `vue_colonies_actives` (selection/migrations/0003_libelle_type_ruche_vues.py),
-    traduit bien le code technique de TypeRuche en libellé français —
-    et pas seulement en base de test, la logique étant dupliquée en SQL."""
+    `vue_colonies_actives` (selection/migrations/0004_typeruche_table_alias.py),
+    utilise bien l'alias de TypeRuche (ou son nom complet à défaut) — et pas
+    seulement côté Python, la jointure étant faite en SQL."""
 
-    def _libelle_pour(self, type_ruche, numero):
+    def _libelle_pour(self, code_type_ruche, numero):
+        type_ruche = TypeRuche.objects.get(code=code_type_ruche)
         ruche = Ruche.objects.create(type_ruche=type_ruche, numero=numero)
         colonie = Colonie.objects.create(
             ruche=ruche, mode_creation="ACHAT", date_creation="2026-01-01",
@@ -87,15 +88,13 @@ class VueColonieActiveLibelleTypeRucheTests(TestCase):
         return VueColonieActive.objects.get(colonie_id=colonie.id).ruche_identifiant
 
     def test_libelle_dadant10(self):
-        self.assertEqual(self._libelle_pour(TypeRuche.DADANT10, 3), "Dadant 10 n°3")
+        self.assertEqual(self._libelle_pour("DADANT10", 3), "Ruche 3")
 
     def test_libelle_ruchette6(self):
-        self.assertEqual(self._libelle_pour(TypeRuche.RUCHETTE6, 7), "Ruchette 6 n°7")
+        self.assertEqual(self._libelle_pour("RUCHETTE6", 7), "Ruchette 7")
 
     def test_libelle_apidea(self):
-        self.assertEqual(self._libelle_pour(TypeRuche.APIDEA, 1), "Apidea n°1")
+        self.assertEqual(self._libelle_pour("APIDEA", 1), "Apidea 1")
 
     def test_libelle_dh(self):
-        self.assertEqual(
-            self._libelle_pour(TypeRuche.DH, 2), "DH (double haussette) n°2",
-        )
+        self.assertEqual(self._libelle_pour("DH", 2), "DH 2")

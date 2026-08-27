@@ -12,6 +12,7 @@ from .models import (
     Ruche,
     Rucher,
     StationFecondation,
+    TypeRuche,
 )
 
 
@@ -21,12 +22,20 @@ class RucherAdmin(admin.ModelAdmin):
     search_fields = ["nom", "localisation"]
 
 
+@admin.register(TypeRuche)
+class TypeRucheAdmin(admin.ModelAdmin):
+    list_display = ["nom", "code", "alias", "numerotation_permanente"]
+    list_editable = ["alias"]
+    search_fields = ["nom", "code", "alias"]
+
+
 @admin.register(Ruche)
 class RucheAdmin(admin.ModelAdmin):
     list_display = ["__str__", "type_ruche", "numero", "rucher", "actif"]
     list_filter = ["type_ruche", "rucher", "actif"]
     list_editable = ["actif"]
     search_fields = ["numero"]
+    autocomplete_fields = ["type_ruche"]
 
 
 @admin.register(StationFecondation)
