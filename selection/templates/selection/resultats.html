@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <title>Résultats de sélection — ApiSelect</title>
+    <style>
+        body { font-family: sans-serif; margin: 2em; color: #222; }
+        h1 { margin-bottom: 0.2em; }
+        .lien-retour { margin-bottom: 1.5em; display: inline-block; }
+        table { border-collapse: collapse; width: 100%; margin-top: 1em; }
+        th, td { border: 1px solid #ccc; padding: 0.4em 0.6em; text-align: left; }
+        th { background: #f2f2f2; }
+        tr.exclue { background: #fdecea; }
+        tr.sans-mesure { background: #f7f7f7; color: #777; }
+        .index { font-weight: bold; }
+        .motif { font-size: 0.9em; color: #a33; }
+        .criteres { font-size: 0.9em; }
+        form.selecteur-campagne { margin-bottom: 1.5em; }
+        .message { padding: 1em; background: #fff3cd; border: 1px solid #ffeeba; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <p class="lien-retour"><a href="{% url 'admin:index' %}">&larr; Retour à l'administration</a></p>
+    <h1>Résultats de sélection</h1>
+
+    {% if not campagnes %}
+        <p class="message">Aucune campagne d'élevage n'existe encore. Créez-en une depuis
+            <a href="{% url 'admin:selection_campagneelevage_add' %}">l'administration</a>
+            pour voir apparaître ce tableau.</p>
+    {% else %}
+        <form class="selecteur-campagne" method="get">
+            <label for="campagne">Campagne :</label>
+            <select id="campagne" name="campagne" onchange="this.form.submit()">
+                {% for campagne in campagnes %}
+                    <option value="{{ campagne.id }}" {% if campagne.id == campagne_selectionnee.id %}selected{% endif %}>
+                        {{ campagne.nom }} ({{ campagne.annee }})
+                    </option>
+                {% endfor %}
+            </select>
+            <noscript><button type="submit">Afficher</button></noscript>
+        </form>
+
+        {% if not lignes %}
+            <p class="message">Aucune colonie active enregistrée pour l'instant.</p>
+        {% else %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Colonie</th>
+                        <th>Rucher</th>
+                        <th>Reine</th>
+                        <th>Index</th>
+                        <th>Statut</th>
+                        {% for critere in criteres %}
+                            <th class="criteres">{{ critere.nom }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ligne in lignes %}
+                        <tr class="{% if ligne.resultat.exclue %}exclue{% elif not ligne.a_des_mesures %}sans-mesure{% endif %}">
+                            <td>
+                                <a href="{% url 'admin:selection_colonie_change' ligne.colonie.colonie_id %}">
+                                    {{ ligne.colonie.ruche_identifiant }}
+                                </a>
+                            </td>
+                            <td>{{ ligne.colonie.rucher_nom|default:"—" }}</td>
+                            <td>{{ ligne.colonie.reine_identifiant|default:"—" }}</td>
+                            <td class="index">
+                                {% if ligne.resultat.index is not None %}
+                                    {{ ligne.resultat.index|floatformat:2 }}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if ligne.resultat.exclue %}
+                                    Exclue — <span class="motif">{{ ligne.resultat.motif_exclusion }}</span>
+                                {% elif not ligne.a_des_mesures %}
+                                    Aucune mesure pour cette campagne
+                                {% else %}
+                                    Retenue
+                                {% endif %}
+                            </td>
+                            {% for score in ligne.scores_par_critere %}
+                                <td class="criteres">{% if score is not None %}{{ score }}{% else %}—{% endif %}</td>
+                            {% endfor %}
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% endif %}
+    {% endif %}
+</body>
+</html>

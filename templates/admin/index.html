@@ -1,0 +1,9 @@
+{% extends "admin/index.html" %}
+
+{% block content %}
+<div class="module" style="margin-bottom: 20px;">
+    <h2>Sélection génétique</h2>
+    <p><a href="{% url 'selection:resultats' %}">Tableau de résultats de sélection</a></p>
+</div>
+{{ block.super }}
+{% endblock %}

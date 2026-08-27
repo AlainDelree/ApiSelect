@@ -1,9 +1,19 @@
 from decimal import Decimal
 
 from django.test import TestCase
+from django.urls import reverse
 
 from .calculs import MesureIndex, calculer_index
-from .models import Colonie, Ruche, TypeRuche, VueColonieActive
+from .models import (
+    CampagneElevage,
+    Colonie,
+    CritereSelection,
+    Mesure,
+    PoidsCritere,
+    Ruche,
+    TypeRuche,
+    VueColonieActive,
+)
 
 
 class CalculerIndexTests(TestCase):
@@ -98,3 +108,95 @@ class VueColonieActiveLibelleTypeRucheTests(TestCase):
 
     def test_libelle_dh(self):
         self.assertEqual(self._libelle_pour("DH", 2), "DH 2")
+
+
+class ResultatsSelectionViewTests(TestCase):
+    """Tests de la vue `selection:resultats` (issue #6) : tri par index,
+    colonies exclues signalées avec leur motif, colonies sans mesure
+    gérées proprement, cas sans campagne."""
+
+    def _creer_colonie(self, numero):
+        type_ruche = TypeRuche.objects.get(code="DADANT10")
+        ruche = Ruche.objects.create(type_ruche=type_ruche, numero=numero)
+        return Colonie.objects.create(
+            ruche=ruche, mode_creation="ACHAT", date_creation="2026-01-01",
+            active=True,
+        )
+
+    def setUp(self):
+        self.campagne = CampagneElevage.objects.create(nom="Campagne 2026", annee=2026)
+        self.critere_sante = CritereSelection.objects.get(code="SANTE")
+        self.critere_proprete = CritereSelection.objects.get(code="PROPRETE")
+
+    def test_tri_par_index_decroissant(self):
+        PoidsCritere.objects.create(
+            campagne=self.campagne, critere=self.critere_proprete, poids=5,
+        )
+        colonie_haute = self._creer_colonie(1)
+        Mesure.objects.create(
+            colonie=colonie_haute, critere=self.critere_proprete,
+            campagne=self.campagne, date_mesure="2026-05-01",
+            valeur_brute="propre", score=4,
+        )
+        colonie_basse = self._creer_colonie(2)
+        Mesure.objects.create(
+            colonie=colonie_basse, critere=self.critere_proprete,
+            campagne=self.campagne, date_mesure="2026-05-01",
+            valeur_brute="sale", score=1,
+        )
+
+        response = self.client.get(reverse("selection:resultats"))
+
+        self.assertEqual(response.status_code, 200)
+        colonie_ids = [ligne["colonie"].colonie_id for ligne in response.context["lignes"]]
+        self.assertEqual(colonie_ids, [colonie_haute.id, colonie_basse.id])
+        indices = [ligne["resultat"].index for ligne in response.context["lignes"]]
+        self.assertEqual(indices, [Decimal(4), Decimal(1)])
+
+    def test_colonie_exclue_affichee_avec_motif(self):
+        PoidsCritere.objects.create(
+            campagne=self.campagne, critere=self.critere_sante, poids=8,
+            seuil_eliminatoire=Decimal("2"),
+        )
+        colonie = self._creer_colonie(3)
+        Mesure.objects.create(
+            colonie=colonie, critere=self.critere_sante,
+            campagne=self.campagne, date_mesure="2026-05-01",
+            valeur_brute="maladie", score=1,
+        )
+
+        response = self.client.get(reverse("selection:resultats"))
+
+        self.assertEqual(response.status_code, 200)
+        lignes = response.context["lignes"]
+        self.assertEqual(len(lignes), 1)
+        self.assertTrue(lignes[0]["resultat"].exclue)
+        self.assertIsNone(lignes[0]["resultat"].index)
+        self.assertIn("Santé", lignes[0]["resultat"].motif_exclusion)
+        self.assertContains(response, "Exclue")
+        # Le motif complet contient un "<" (comparaison de seuil), échappé en
+        # HTML : on vérifie la partie textuelle qui identifie le critère.
+        self.assertContains(response, "Critère « Santé » sous le seuil éliminatoire")
+
+    def test_colonie_sans_mesure_geree_proprement(self):
+        colonie = self._creer_colonie(4)
+
+        response = self.client.get(reverse("selection:resultats"))
+
+        self.assertEqual(response.status_code, 200)
+        lignes = response.context["lignes"]
+        self.assertEqual(len(lignes), 1)
+        self.assertFalse(lignes[0]["a_des_mesures"])
+        self.assertIsNone(lignes[0]["resultat"].index)
+        self.assertContains(response, "Aucune mesure pour cette campagne")
+        # Colonnes de critères vides affichées avec un tiret plutôt qu'absentes.
+        self.assertTrue(all(score is None for score in lignes[0]["scores_par_critere"]))
+
+    def test_aucune_campagne_message_clair(self):
+        CampagneElevage.objects.all().delete()
+
+        response = self.client.get(reverse("selection:resultats"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Aucune campagne")
+        self.assertEqual(list(response.context["campagnes"]), [])
