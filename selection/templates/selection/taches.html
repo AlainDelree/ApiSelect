@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <title>Tâches à venir — ApiSelect</title>
+    <style>
+        body { font-family: sans-serif; margin: 2em; color: #222; }
+        h1 { margin-bottom: 0.2em; }
+        .lien-retour { margin-bottom: 1.5em; display: inline-block; }
+        table { border-collapse: collapse; width: 100%; margin-top: 1em; }
+        th, td { border: 1px solid #ccc; padding: 0.4em 0.6em; text-align: left; }
+        th { background: #f2f2f2; }
+        tr.passee { background: #fdecea; }
+        .message { padding: 1em; background: #fff3cd; border: 1px solid #ffeeba; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <p class="lien-retour"><a href="{% url 'admin:index' %}">&larr; Retour à l'administration</a></p>
+    <h1>Tâches à venir</h1>
+    <p><a href="{% url 'selection:calendrier' %}">Voir le calendrier mensuel &rarr;</a></p>
+
+    {% if not etapes %}
+        <p class="message">Aucune étape en attente : toutes les campagnes actives sont soit
+            terminées, soit sans date de référence renseignée.</p>
+    {% else %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Date prévue</th>
+                    <th>Campagne</th>
+                    <th>Étape</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for etape in etapes %}
+                    <tr class="{% if etape.date_prevue < aujourdhui %}passee{% endif %}">
+                        <td>{{ etape.date_prevue }}</td>
+                        <td>{{ etape.campagne.nom }}</td>
+                        <td>{{ etape.get_type_etape_display }}</td>
+                        <td><a href="{% url 'admin:selection_etapecalendrier_change' etape.id %}">Marquer réalisée &rarr;</a></td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+</body>
+</html>

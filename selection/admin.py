@@ -5,6 +5,7 @@ from .models import (
     Colonie,
     ConfigurationColonie,
     CritereSelection,
+    EtapeCalendrier,
     EvenementColonie,
     Mesure,
     PoidsCritere,
@@ -77,11 +78,37 @@ class ColonieAdmin(admin.ModelAdmin):
     inlines = [ConfigurationColonieInline, EvenementColonieInline]
 
 
+class EtapeCalendrierInline(admin.TabularInline):
+    """Étapes calculées automatiquement (cf. selection/signals.py) : la
+    date prévue et le type d'étape sont en lecture seule ici, seuls
+    `realisee`/`date_reelle`/`notes` se saisissent à la main."""
+
+    model = EtapeCalendrier
+    extra = 0
+    fields = ["type_etape", "date_prevue", "realisee", "date_reelle", "notes"]
+    readonly_fields = ["type_etape", "date_prevue"]
+    can_delete = False
+    ordering = ["date_prevue"]
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(CampagneElevage)
 class CampagneElevageAdmin(admin.ModelAdmin):
-    list_display = ["nom", "annee", "date_debut", "date_fin"]
+    list_display = ["nom", "annee", "date_reference", "date_debut", "date_fin"]
     list_filter = ["annee"]
     search_fields = ["nom"]
+    inlines = [EtapeCalendrierInline]
+
+
+@admin.register(EtapeCalendrier)
+class EtapeCalendrierAdmin(admin.ModelAdmin):
+    list_display = ["campagne", "type_etape", "date_prevue", "realisee", "date_reelle"]
+    list_filter = ["type_etape", "realisee", "campagne"]
+    list_editable = ["realisee", "date_reelle"]
+    search_fields = ["campagne__nom"]
+    autocomplete_fields = ["campagne"]
 
 
 @admin.register(CritereSelection)

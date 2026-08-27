@@ -1,16 +1,19 @@
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.test import TestCase
 from django.urls import reverse
 
-from .calculs import MesureIndex, calculer_index
+from .calculs import DECALAGES_JOURS_ETAPES, MesureIndex, calculer_dates_etapes, calculer_index
 from .models import (
     CampagneElevage,
     Colonie,
     CritereSelection,
+    EtapeCalendrier,
     Mesure,
     PoidsCritere,
     Ruche,
+    TypeEtapeCalendrier,
     TypeRuche,
     VueColonieActive,
 )
@@ -200,3 +203,175 @@ class ResultatsSelectionViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Aucune campagne")
         self.assertEqual(list(response.context["campagnes"]), [])
+
+
+class CalculerDatesEtapesTests(TestCase):
+    """Vérifie la cascade de dates contre l'exemple réel du fichier ODS
+    source (Cours_Apiculture/calendrier élevage de reine.ods, non
+    versionné — cf. rapport de clôture de l'issue #7 pour le détail des
+    cellules relevées). Ponte le 5/06/2022 -> picking le 9/06/2022,
+    reste de la cascade documentée en commentaire dans calculs.py."""
+
+    def setUp(self):
+        self.date_ponte = date(2022, 6, 5)
+        self.dates = calculer_dates_etapes(self.date_ponte)
+
+    def test_toutes_les_etapes_du_modele_sont_calculees(self):
+        self.assertEqual(set(self.dates), {code for code, _ in TypeEtapeCalendrier.choices})
+
+    def test_picking_quatre_jours_apres_la_ponte(self):
+        self.assertEqual(self.dates["PICKING"], date(2022, 6, 9))
+
+    def test_starter_le_meme_jour_que_le_picking(self):
+        self.assertEqual(self.dates["STARTER"], self.dates["PICKING"])
+
+    def test_finisseur_un_jour_apres_le_picking(self):
+        self.assertEqual(self.dates["FINISSEUR"], date(2022, 6, 10))
+
+    def test_couveuse(self):
+        self.assertEqual(self.dates["COUVEUSE"], date(2022, 6, 14))
+
+    def test_peuplement_ruchettes(self):
+        self.assertEqual(self.dates["RUCHETTES"], date(2022, 6, 19))
+
+    def test_liberation(self):
+        self.assertEqual(self.dates["LIBERATION"], date(2022, 6, 22))
+
+    def test_controle_naissance(self):
+        self.assertEqual(self.dates["CONTROLE_NAISSANCE"], date(2022, 6, 24))
+
+    def test_debut_ponte(self):
+        self.assertEqual(self.dates["DEBUT_PONTE"], date(2022, 6, 30))
+
+    def test_controle_ponte(self):
+        self.assertEqual(self.dates["CONTROLE_PONTE"], date(2022, 7, 1))
+
+    def test_elevage_males_seize_jours_avant_la_ponte(self):
+        # Décalage -16j : principe de saturation du cours (CONTEXTE.md),
+        # pas une cellule calculée de l'ODS — cf. calculs.py.
+        self.assertEqual(self.dates["ELEVAGE_MALES"], self.date_ponte - timedelta(days=16))
+
+    def test_decalages_geles_contre_regression_silencieuse(self):
+        # Verrouille les valeurs exactes relevées dans l'ODS : toute
+        # modification de DECALAGES_JOURS_ETAPES doit être volontaire.
+        self.assertEqual(DECALAGES_JOURS_ETAPES, {
+            "ELEVAGE_MALES": -16,
+            "PICKING": 4,
+            "STARTER": 4,
+            "FINISSEUR": 5,
+            "COUVEUSE": 9,
+            "RUCHETTES": 14,
+            "LIBERATION": 17,
+            "CONTROLE_NAISSANCE": 19,
+            "DEBUT_PONTE": 25,
+            "CONTROLE_PONTE": 26,
+        })
+
+
+class RecalculAutomatiqueEtapesTests(TestCase):
+    """Vérifie le signal post_save (cf. selection/signals.py) : création
+    des étapes à la saisie de date_reference, recalcul si elle change,
+    aucune interférence entre campagnes en parallèle, et préservation du
+    marquage "réalisée" au recalcul."""
+
+    def test_creation_campagne_avec_date_reference_cree_les_etapes(self):
+        campagne = CampagneElevage.objects.create(
+            nom="Campagne A", annee=2022, date_reference=date(2022, 6, 5),
+        )
+        self.assertEqual(campagne.etapes.count(), len(TypeEtapeCalendrier.choices))
+        picking = campagne.etapes.get(type_etape=TypeEtapeCalendrier.PICKING)
+        self.assertEqual(picking.date_prevue, date(2022, 6, 9))
+
+    def test_campagne_sans_date_reference_ne_cree_aucune_etape(self):
+        campagne = CampagneElevage.objects.create(nom="Campagne B", annee=2022)
+        self.assertEqual(campagne.etapes.count(), 0)
+
+    def test_modification_date_reference_recalcule_les_etapes(self):
+        campagne = CampagneElevage.objects.create(
+            nom="Campagne C", annee=2022, date_reference=date(2022, 6, 5),
+        )
+        campagne.date_reference = date(2022, 7, 5)
+        campagne.save()
+
+        picking = campagne.etapes.get(type_etape=TypeEtapeCalendrier.PICKING)
+        self.assertEqual(picking.date_prevue, date(2022, 7, 9))
+        # Toujours une seule ligne par (campagne, étape), pas de doublon.
+        self.assertEqual(campagne.etapes.count(), len(TypeEtapeCalendrier.choices))
+
+    def test_plusieurs_campagnes_en_parallele_sans_interference(self):
+        campagne_1 = CampagneElevage.objects.create(
+            nom="Lignée 1", annee=2022, date_reference=date(2022, 6, 5),
+        )
+        campagne_2 = CampagneElevage.objects.create(
+            nom="Lignée 2", annee=2022, date_reference=date(2022, 6, 20),
+        )
+
+        picking_1 = campagne_1.etapes.get(type_etape=TypeEtapeCalendrier.PICKING)
+        picking_2 = campagne_2.etapes.get(type_etape=TypeEtapeCalendrier.PICKING)
+
+        self.assertEqual(picking_1.date_prevue, date(2022, 6, 9))
+        self.assertEqual(picking_2.date_prevue, date(2022, 6, 24))
+        self.assertEqual(EtapeCalendrier.objects.filter(campagne=campagne_1).count(), 10)
+        self.assertEqual(EtapeCalendrier.objects.filter(campagne=campagne_2).count(), 10)
+
+    def test_marquage_realisee_preserve_par_un_recalcul_ulterieur(self):
+        campagne = CampagneElevage.objects.create(
+            nom="Campagne D", annee=2022, date_reference=date(2022, 6, 5),
+        )
+        picking = campagne.etapes.get(type_etape=TypeEtapeCalendrier.PICKING)
+        picking.realisee = True
+        picking.date_reelle = date(2022, 6, 10)
+        picking.save()
+
+        # Une sauvegarde ultérieure de la campagne (ex. modif des notes,
+        # date_reference inchangée) ne doit pas effacer le marquage.
+        campagne.notes = "RAS"
+        campagne.save()
+
+        picking.refresh_from_db()
+        self.assertTrue(picking.realisee)
+        self.assertEqual(picking.date_reelle, date(2022, 6, 10))
+        self.assertEqual(picking.date_prevue, date(2022, 6, 9))
+
+
+class CalendrierEtTachesViewsTests(TestCase):
+    """Tests des vues `selection:calendrier` et `selection:taches`
+    (issue #7)."""
+
+    def setUp(self):
+        self.campagne = CampagneElevage.objects.create(
+            nom="Campagne 2022", annee=2022, date_reference=date(2022, 6, 5),
+        )
+
+    def test_calendrier_affiche_les_etapes_du_mois(self):
+        response = self.client.get(reverse("selection:calendrier"), {"annee": 2022, "mois": 6})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Campagne 2022")
+        self.assertContains(response, "Picking")
+
+    def test_calendrier_mois_sans_etape_naffiche_rien_de_special(self):
+        response = self.client.get(reverse("selection:calendrier"), {"annee": 2023, "mois": 1})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Campagne 2022")
+
+    def test_taches_liste_les_etapes_non_realisees_par_ordre_chronologique(self):
+        response = self.client.get(reverse("selection:taches"))
+
+        self.assertEqual(response.status_code, 200)
+        etapes = list(response.context["etapes"])
+        self.assertEqual(len(etapes), len(TypeEtapeCalendrier.choices))
+        dates = [etape.date_prevue for etape in etapes]
+        self.assertEqual(dates, sorted(dates))
+
+    def test_taches_exclut_les_etapes_marquees_realisees(self):
+        picking = self.campagne.etapes.get(type_etape=TypeEtapeCalendrier.PICKING)
+        picking.realisee = True
+        picking.save()
+
+        response = self.client.get(reverse("selection:taches"))
+
+        etapes = list(response.context["etapes"])
+        self.assertNotIn(picking, etapes)
+        self.assertEqual(len(etapes), len(TypeEtapeCalendrier.choices) - 1)

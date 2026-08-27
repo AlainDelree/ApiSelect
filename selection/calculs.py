@@ -8,6 +8,7 @@ réelle (voir MesureIndex : simple porte-données, indépendant de l'ORM).
 """
 
 from dataclasses import dataclass
+from datetime import timedelta
 from decimal import Decimal
 from typing import Iterable, Optional
 
@@ -108,3 +109,55 @@ def calculer_index_colonie(colonie_id: int, campagne_id: int) -> ResultatIndex:
         for ligne in lignes
     )
     return calculer_index(mesures)
+
+
+# ---------------------------------------------------------------------------
+# Calendrier d'élevage : dates en cascade (issue #7)
+#
+# Logique reprise du fichier source Cours_Apiculture/calendrier élevage de
+# reine.ods (gitignoré, cf. CONTEXTE.md — jamais committé). Sur la feuille
+# "Calendrier" de ce fichier, toutes les dates de la grille se déduisent par
+# une cascade de +1 jour à partir d'une cellule ancre (B14), elle-même égale
+# à la date de ponte si elle est saisie, sinon à la date de picking moins 4
+# jours (formule =IF(ponte>0; ponte; picking-4)). La feuille "récapitulatif"
+# nomme chaque étape utile du cours en référençant une cellule précise de
+# cette grille. Les décalages ci-dessous sont les écarts en jours, relevés
+# cellule par cellule dans l'ODS, entre chaque étape nommée et cette date de
+# ponte (jour 0) :
+#   B14 (ponte, jour 0) -> F14 (picking/enlarvement, jour+4)
+#   -> A22 (finisseur, jour+5) -> E22 (couveuse, jour+9)
+#   -> D30 (peuplement ruchettes, jour+14) -> A38 (libération, jour+17)
+#   -> C38 (contrôle naissances, jour+19) -> C46 (début ponte, jour+25)
+#   -> D46 (contrôle ponte, jour+26)
+# L'étape "élevage des mâles" n'a PAS de cellule calculée dans l'ODS (qui ne
+# porte qu'un champ texte libre "Mâle :" pour la lignée) : son décalage de
+# -16 jours reprend le principe de saturation de mâles décrit dans le cours
+# et résumé dans CONTEXTE.md, pas une formule du tableur — cf. rapport de
+# clôture de l'issue #7 pour cette ambiguïté.
+# ---------------------------------------------------------------------------
+
+DECALAGES_JOURS_ETAPES = {
+    "ELEVAGE_MALES": -16,
+    "PICKING": 4,
+    "STARTER": 4,
+    "FINISSEUR": 5,
+    "COUVEUSE": 9,
+    "RUCHETTES": 14,
+    "LIBERATION": 17,
+    "CONTROLE_NAISSANCE": 19,
+    "DEBUT_PONTE": 25,
+    "CONTROLE_PONTE": 26,
+}
+
+
+def calculer_dates_etapes(date_ponte):
+    """À partir de la date de ponte (jour 0 de la cascade de l'ODS),
+    calcule la date de chaque étape du calendrier d'élevage.
+
+    Retourne {code_étape: date}, code_étape correspondant aux valeurs de
+    `TypeEtapeCalendrier` (selection/models.py).
+    """
+    return {
+        code: date_ponte + timedelta(days=decalage)
+        for code, decalage in DECALAGES_JOURS_ETAPES.items()
+    }

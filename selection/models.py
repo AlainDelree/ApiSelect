@@ -294,6 +294,13 @@ class CampagneElevage(models.Model):
     annee = models.PositiveIntegerField()
     date_debut = models.DateField(null=True, blank=True)
     date_fin = models.DateField(null=True, blank=True)
+    date_reference = models.DateField(
+        null=True, blank=True,
+        help_text="Date de ponte servant de point de départ (jour 0) au "
+                   "calcul en cascade des étapes du calendrier d'élevage "
+                   "(cf. EtapeCalendrier). La renseigner ou la modifier "
+                   "recalcule automatiquement toutes les dates prévues.",
+    )
     notes = models.TextField(blank=True)
 
     class Meta:
@@ -303,6 +310,57 @@ class CampagneElevage(models.Model):
 
     def __str__(self):
         return self.nom
+
+
+class TypeEtapeCalendrier(models.TextChoices):
+    ELEVAGE_MALES = "ELEVAGE_MALES", "Élevage des mâles (saturation)"
+    PICKING = "PICKING", "Picking (greffage des larves)"
+    STARTER = "STARTER", "Starter"
+    FINISSEUR = "FINISSEUR", "Finisseur"
+    COUVEUSE = "COUVEUSE", "Couveuse"
+    RUCHETTES = "RUCHETTES", "Peuplement des ruchettes"
+    LIBERATION = "LIBERATION", "Libération des ruchettes"
+    CONTROLE_NAISSANCE = "CONTROLE_NAISSANCE", "Contrôle des naissances"
+    DEBUT_PONTE = "DEBUT_PONTE", "Début de ponte"
+    CONTROLE_PONTE = "CONTROLE_PONTE", "Contrôle de ponte"
+
+
+class EtapeCalendrier(models.Model):
+    """Une étape calculée du calendrier d'élevage, pour une campagne.
+
+    `date_prevue` est recalculée automatiquement (cf. selection/signals.py)
+    à chaque sauvegarde d'une CampagneElevage dont `date_reference` est
+    renseignée, selon la logique de cascade de l'ODS source (cf.
+    calculs.calculer_dates_etapes). `realisee`, `date_reelle` et `notes`
+    sont saisies à la main et jamais écrasées par ce recalcul, pour
+    permettre de tracer l'écart entre prévu et réel.
+    """
+
+    campagne = models.ForeignKey(
+        CampagneElevage, on_delete=models.CASCADE, related_name="etapes",
+    )
+    type_etape = models.CharField(max_length=30, choices=TypeEtapeCalendrier.choices)
+    date_prevue = models.DateField()
+    realisee = models.BooleanField(default=False)
+    date_reelle = models.DateField(
+        null=True, blank=True,
+        help_text="Date effectivement observée, si différente de la date "
+                   "prévue (pour tracer les écarts).",
+    )
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = "Étape de calendrier"
+        verbose_name_plural = "Étapes de calendrier"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["campagne", "type_etape"], name="unique_etape_par_campagne",
+            ),
+        ]
+        ordering = ["date_prevue"]
+
+    def __str__(self):
+        return f"{self.campagne} — {self.get_type_etape_display()} ({self.date_prevue})"
 
 
 class TypeMesure(models.TextChoices):
