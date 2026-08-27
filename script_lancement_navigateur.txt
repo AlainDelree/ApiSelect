@@ -1,0 +1,52 @@
+| PROJET | apiselect |
+| MODE | écriture |
+| TIMEOUT | 400s |
+| COMPLEXITE | léger |
+#Titre: Commande globale "apiselect" qui lance le serveur et ouvre le navigateur
+
+## Contexte
+Alain souhaite pouvoir taper une commande depuis n'importe quel
+répertoire (comme "chess" pour un autre de ses projets) qui démarre
+ApiSelect et ouvre automatiquement le navigateur sur /admin/, sans
+avoir à se placer dans ~/ApiSelect ni à activer le venv manuellement.
+
+## Tâche demandée
+1. Créer un script exécutable (ex. `bin/apiselect` dans le dépôt, ou
+   `lancer.sh` à la racine — au choix le plus simple à rendre
+   accessible globalement) qui :
+   - se place lui-même dans /home/alain/ApiSelect quel que soit le
+     répertoire courant d'où il est appelé (chemin absolu, pas relatif)
+   - active le venv du projet
+   - démarre `python manage.py runserver` en arrière-plan
+   - attend que le serveur soit prêt (tentative de connexion sur
+     127.0.0.1:8000 en boucle courte, ou délai de 1-2 secondes)
+   - ouvre automatiquement le navigateur par défaut sur
+     http://127.0.0.1:8000/admin/ (module `webbrowser` de Python,
+     portable Linux/Windows/Mac)
+2. Rendre cette commande invocable globalement en tapant simplement
+   `apiselect` depuis n'importe quel répertoire — la méthode la plus
+   simple et robuste étant un lien symbolique dans un dossier déjà
+   présent dans le PATH d'Alain (vérifier avec `echo $PATH`, souvent
+   ~/.local/bin ou ~/bin existe déjà) plutôt qu'un alias shell (qui ne
+   fonctionnerait que dans le shell interactif, pas depuis un
+   gestionnaire de fichiers ou un lanceur). Si aucun dossier adapté
+   n'existe dans le PATH, le signaler et proposer la commande exacte à
+   ajouter (export PATH ou création du dossier) plutôt que de modifier
+   .bashrc sans consentement explicite.
+3. Rediriger aussi l'URL racine `/` vers `/admin/` dans
+   apiselect/urls.py (redirection simple), pour que même en cas
+   d'accès direct à la racine du site, ça n'affiche plus une 404.
+4. Documenter la commande dans un court paragraphe (README.md à la
+   racine si absent, sinon commentaire en tête du script).
+5. S'assurer que Ctrl+C arrête proprement le serveur en arrière-plan
+   (pas de processus orphelin).
+
+## Résultat attendu
+Taper `apiselect` depuis n'importe quel répertoire démarre le serveur
+Django et ouvre un onglet de navigateur sur /admin/. La racine `/`
+redirige vers `/admin/` même sans passer par cette commande. Rapport
+précisant la méthode exacte utilisée pour rendre la commande globale
+(lien symbolique + chemin choisi) et toute action manuelle restant à
+faire côté Alain (ex. ouvrir un nouveau terminal pour que le PATH mis
+à jour prenne effet).
+
