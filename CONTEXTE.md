@@ -41,34 +41,27 @@ WeasyPrint pour cette raison), calendrier (FullCalendar ou vue custom).
 Ne jamais committer ni référencer dans une issue.
 
 ## Sélection génétique
-9 critères du cours, deux passes : **rapide** (toutes colonies,
-chaque visite) santé/propreté/agressivité/tenue au cadre ;
-**approfondie** (colonies pressenties, matériel requis) nettoyage
-(temps)/récolte (kg vs moyenne rucher)/couvain (D×d×nb cadres)/miel
-(kg)/pollen (dm²). Mesure brute + score 1-4 selon barème du cours
-(`Cours_Apiculture/Elevage de reine.pdf`, non versionné). Poids 0-10
-par année/campagne (historisé). Seuils éliminatoires optionnels (ex.
-santé, agressivité), indépendants du poids.
-Index = Σ(score×poids)/Σ(poids). Tableau trié par index, détail des
-9 mesures à côté.
+9 critères du cours, deux passes : **rapide** (toutes colonies) santé/
+propreté/agressivité/tenue au cadre ; **approfondie** (colonies
+pressenties) nettoyage/récolte/couvain/miel/pollen. Score 1-4 selon
+barème du cours (`Cours_Apiculture/Elevage de reine.pdf`, non
+versionné). Poids 0-10 par campagne (historisé). Seuils éliminatoires
+optionnels. Index = Σ(score×poids)/Σ(poids). Tableau trié par index.
 
 ## Calendrier d'élevage
-Reprend la logique de l'ODS (dates en cascade depuis une ponte ou un
-picking : starter, picking, finisseur, couveuse, ruchettes,
-libération, contrôle naissance, ponte). Plusieurs campagnes en
-parallèle (multi-lignées, multi-sites), saturation de mâles (~16j
-avant ponte des reines). Deux vues : calendrier mois/semaine
-(campagnes superposées) + liste de tâches toutes campagnes confondues.
+Cascade de dates depuis l'ODS (ponte = jour 0 : mâles -16j, picking/
+starter +4j, finisseur +5j, couveuse +9j, ruchettes +14j, libération
++17j, contrôle naissance +19j, début ponte +25j, contrôle ponte +26j).
+Multi-campagnes en parallèle. Vue calendrier mensuel + liste de tâches.
 
 ## Fiches de terrain
-Bouton générant un PDF imprimable (fiche rapide + approfondie),
-header pré-rempli (date, ruchers, colonies + lignée). Brouillon pour
-la saisie du soir.
+Fiche rapide (toutes colonies actives, 4 critères passe rapide, cases
+1-4 à entourer) et fiche approfondie (colonies choisies via
+formulaire, 5 critères, valeur brute à noter). xhtml2pdf.
 
 ## État d'avancement
-Django initialisé (modèle, admin, 3 vues PostgreSQL en lecture, index
-pondéré testé). TypeRuche en table avec alias (migration 0004),
-éditables depuis l'admin. CritereSelection peuplé (9 critères,
-migration 0005). Aucune donnée réelle saisie (2 colonies en attente
-de visite). Suite : tableau de résultats trié, calendrier, fiches PDF
-(xhtml2pdf).
+Conception initiale complète et implémentée : modèle de données,
+3 vues PostgreSQL, TypeRuche en table (alias éditables), 9 critères
+peuplés, index pondéré testé, tableau de résultats, calendrier
+multi-campagnes, fiches PDF. Aucune donnée réelle saisie (2 colonies
+en attente de visite terrain). Suite : à définir après saisie réelle.
