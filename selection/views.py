@@ -2,13 +2,18 @@ import calendar
 from collections import defaultdict
 from datetime import date, timedelta
 
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, render
+from django.template.loader import render_to_string
+from xhtml2pdf import pisa
 
 from .calculs import calculer_index_colonie
 from .models import (
     CampagneElevage,
     CritereSelection,
     EtapeCalendrier,
+    Reine,
+    TypeMesure,
     VueColonieActive,
     VueMesureComplete,
 )
@@ -160,3 +165,109 @@ def liste_taches(request):
         "etapes": etapes,
         "aujourdhui": date.today(),
     })
+
+
+def _campagne_selectionnee(request):
+    """Campagne demandée via `?campagne=`, ou la plus récente par défaut
+    (même règle que `resultats_selection`) ; None si aucune campagne
+    n'existe encore."""
+    campagne_id = request.GET.get("campagne") or request.POST.get("campagne")
+    if campagne_id:
+        return get_object_or_404(CampagneElevage, pk=campagne_id)
+    return CampagneElevage.objects.first()
+
+
+def _lignees_par_reine(colonies):
+    """Lignée mâle probable par reine, pour les colonies données — la vue
+    `vue_colonies_actives` expose l'identifiant de la reine mais pas ce
+    champ, non repris dans l'aplatissement SQL."""
+    reine_ids = [colonie.reine_id for colonie in colonies if colonie.reine_id]
+    return {
+        reine_id: lignee
+        for reine_id, lignee in Reine.objects.filter(id__in=reine_ids).values_list(
+            "id", "lignee_male_probable"
+        )
+        if lignee
+    }
+
+
+def _rendre_pdf(template_name, contexte, nom_fichier):
+    """Rend un gabarit HTML en PDF via xhtml2pdf (portable Linux/Windows
+    sans dépendance système, cf. CONTEXTE.md — préféré à WeasyPrint pour
+    cette raison)."""
+    html = render_to_string(template_name, contexte)
+    reponse = HttpResponse(content_type="application/pdf")
+    reponse["Content-Disposition"] = f'inline; filename="{nom_fichier}"'
+    resultat_pisa = pisa.CreatePDF(html, dest=reponse)
+    if resultat_pisa.err:
+        return HttpResponse("Erreur lors de la génération du PDF.", status=500)
+    return reponse
+
+
+def fiche_rapide_pdf(request):
+    """Fiche de terrain imprimable pour la passe rapide : une ligne par
+    colonie active (toutes, sans sélection préalable), colonnes des 4
+    critères PASSE_RAPIDE avec assez d'espace pour entourer une note de 1
+    à 4 à la main plutôt que d'écrire (cf. CONTEXTE.md — visite au rucher,
+    gants + propolis), colonne « note libre » finale.
+    """
+    campagne = _campagne_selectionnee(request)
+    criteres = list(CritereSelection.objects.filter(type_mesure=TypeMesure.PASSE_RAPIDE))
+    colonies = list(VueColonieActive.objects.all())
+    lignees = _lignees_par_reine(colonies)
+
+    ruchers = {colonie.rucher_nom for colonie in colonies if colonie.rucher_nom}
+    nom_rucher = ruchers.pop() if len(ruchers) == 1 else "Tous ruchers"
+
+    contexte = {
+        "campagne": campagne,
+        "date_jour": date.today(),
+        "nom_rucher": nom_rucher,
+        "criteres": criteres,
+        "lignes": [
+            {"colonie": colonie, "lignee": lignees.get(colonie.reine_id, "")}
+            for colonie in colonies
+        ],
+    }
+    return _rendre_pdf("selection/fiche_rapide_pdf.html", contexte, "fiche_rapide.pdf")
+
+
+def fiche_approfondie_formulaire(request):
+    """Formulaire de sélection des colonies à inclure dans la fiche
+    approfondie : à la différence de la fiche rapide, elle ne concerne que
+    des candidates déjà pressenties, jamais toutes les colonies actives
+    par défaut (cf. issue #8)."""
+    campagnes = CampagneElevage.objects.all()
+    campagne_selectionnee = _campagne_selectionnee(request) if campagnes.exists() else None
+    colonies = list(VueColonieActive.objects.all())
+    return render(request, "selection/fiche_approfondie_formulaire.html", {
+        "campagnes": campagnes,
+        "campagne_selectionnee": campagne_selectionnee,
+        "colonies": colonies,
+    })
+
+
+def fiche_approfondie_pdf(request):
+    """Fiche de terrain imprimable pour la passe approfondie, limitée aux
+    colonies choisies dans `fiche_approfondie_formulaire`. Colonnes des 5
+    critères PASSE_APPROFONDIE avec un espace pour la valeur brute
+    mesurée — pas directement un score 1-4, ce barème nécessitant une
+    mesure physique convertie ensuite (cf. CONTEXTE.md)."""
+    campagne = _campagne_selectionnee(request)
+    colonie_ids = request.POST.getlist("colonies") or request.GET.getlist("colonies")
+    criteres = list(CritereSelection.objects.filter(type_mesure=TypeMesure.PASSE_APPROFONDIE))
+    colonies = list(VueColonieActive.objects.filter(colonie_id__in=colonie_ids))
+    lignees = _lignees_par_reine(colonies)
+
+    contexte = {
+        "campagne": campagne,
+        "date_jour": date.today(),
+        "criteres": criteres,
+        "lignes": [
+            {"colonie": colonie, "lignee": lignees.get(colonie.reine_id, "")}
+            for colonie in colonies
+        ],
+    }
+    return _rendre_pdf(
+        "selection/fiche_approfondie_pdf.html", contexte, "fiche_approfondie.pdf"
+    )

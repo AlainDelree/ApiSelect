@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <title>Fiche de terrain — passe approfondie</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 1.5cm;
+        }
+        body { font-family: Helvetica, Arial, sans-serif; font-size: 10pt; color: #000; }
+        h1 { font-size: 15pt; margin-bottom: 0.3cm; }
+        .entete { margin-bottom: 0.6cm; font-size: 10pt; }
+        .entete p { margin: 0.1cm 0; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td {
+            border: 1px solid #000;
+            padding: 5pt 6pt;
+            text-align: left;
+            vertical-align: top;
+        }
+        th { background-color: #e0e0e0; }
+        td.valeur-brute { height: 1.1cm; }
+    </style>
+</head>
+<body>
+    <h1>Fiche de terrain — passe approfondie</h1>
+    <div class="entete">
+        <p>Date : {{ date_jour|date:"d/m/Y" }}</p>
+        {% if campagne %}<p>Campagne : {{ campagne.nom }} ({{ campagne.annee }})</p>{% endif %}
+    </div>
+
+    {% if not lignes %}
+        <p>Aucune colonie sélectionnée. Revenir au
+            <a href="{% url 'selection:fiche_approfondie_formulaire' %}">formulaire de sélection</a>.</p>
+    {% else %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Colonie</th>
+                    <th>Lignée reine</th>
+                    {% for critere in criteres %}
+                        <th>{{ critere.nom }}{% if critere.unite %} ({{ critere.unite }}){% endif %}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for ligne in lignes %}
+                    <tr>
+                        <td>{{ ligne.colonie.ruche_identifiant }}</td>
+                        <td>{{ ligne.lignee|default:"—" }}</td>
+                        {% for critere in criteres %}
+                            <td class="valeur-brute"></td>
+                        {% endfor %}
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+</body>
+</html>

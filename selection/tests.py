@@ -12,6 +12,7 @@ from .models import (
     EtapeCalendrier,
     Mesure,
     PoidsCritere,
+    Reine,
     Ruche,
     TypeEtapeCalendrier,
     TypeRuche,
@@ -375,3 +376,117 @@ class CalendrierEtTachesViewsTests(TestCase):
         etapes = list(response.context["etapes"])
         self.assertNotIn(picking, etapes)
         self.assertEqual(len(etapes), len(TypeEtapeCalendrier.choices) - 1)
+
+
+class FichesTerrainPdfTests(TestCase):
+    """Tests des fiches de terrain PDF (issue #8) : génération réussie
+    (statut 200, content-type PDF), contenu correct de la fiche rapide
+    (toutes les colonies actives) et de la fiche approfondie (uniquement
+    les colonies sélectionnées dans le formulaire)."""
+
+    def _creer_colonie(self, numero, reine=None, active=True):
+        type_ruche = TypeRuche.objects.get(code="DADANT10")
+        ruche = Ruche.objects.create(type_ruche=type_ruche, numero=numero)
+        return Colonie.objects.create(
+            ruche=ruche, mode_creation="ACHAT", date_creation="2026-01-01",
+            active=active, reine_actuelle=reine,
+        )
+
+    def setUp(self):
+        self.campagne = CampagneElevage.objects.create(nom="Campagne 2026", annee=2026)
+
+    def test_fiche_rapide_statut_200_et_content_type_pdf(self):
+        self._creer_colonie(1)
+
+        response = self.client.get(reverse("selection:fiche_rapide"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+
+    def test_fiche_rapide_contient_toutes_les_colonies_actives(self):
+        colonie_active_1 = self._creer_colonie(1)
+        colonie_active_2 = self._creer_colonie(2)
+        self._creer_colonie(3, active=False)  # ne doit pas apparaître
+
+        response = self.client.get(reverse("selection:fiche_rapide"))
+
+        colonie_ids = [ligne["colonie"].colonie_id for ligne in response.context["lignes"]]
+        self.assertCountEqual(colonie_ids, [colonie_active_1.id, colonie_active_2.id])
+
+    def test_fiche_rapide_utilise_les_criteres_de_la_passe_rapide(self):
+        self._creer_colonie(1)
+
+        response = self.client.get(reverse("selection:fiche_rapide"))
+
+        codes = {critere.code for critere in response.context["criteres"]}
+        codes_attendus = set(
+            CritereSelection.objects.filter(type_mesure="PASSE_RAPIDE")
+            .values_list("code", flat=True)
+        )
+        self.assertEqual(codes, codes_attendus)
+        self.assertEqual(len(codes_attendus), 4)
+
+    def test_fiche_rapide_associe_la_lignee_de_la_reine_a_la_bonne_colonie(self):
+        reine = Reine.objects.create(
+            identifiant="R26-01", lignee_male_probable="Lignée Buckfast",
+        )
+        colonie_avec_reine = self._creer_colonie(1, reine=reine)
+        colonie_sans_reine = self._creer_colonie(2)
+
+        response = self.client.get(reverse("selection:fiche_rapide"))
+
+        lignees = {
+            ligne["colonie"].colonie_id: ligne["lignee"]
+            for ligne in response.context["lignes"]
+        }
+        self.assertEqual(lignees[colonie_avec_reine.id], "Lignée Buckfast")
+        self.assertEqual(lignees[colonie_sans_reine.id], "")
+
+    def test_formulaire_approfondie_liste_les_colonies_actives(self):
+        self._creer_colonie(1)
+        self._creer_colonie(2, active=False)
+
+        response = self.client.get(reverse("selection:fiche_approfondie_formulaire"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Ruche 1")
+        self.assertNotContains(response, "Ruche 2")
+
+    def test_fiche_approfondie_statut_200_et_content_type_pdf(self):
+        colonie = self._creer_colonie(1)
+
+        response = self.client.post(
+            reverse("selection:fiche_approfondie_pdf"),
+            {"campagne": self.campagne.id, "colonies": [colonie.id]},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+
+    def test_fiche_approfondie_ne_contient_que_les_colonies_selectionnees(self):
+        colonie_incluse = self._creer_colonie(1)
+        self._creer_colonie(2)  # active, mais non cochée dans le formulaire
+
+        response = self.client.post(
+            reverse("selection:fiche_approfondie_pdf"),
+            {"campagne": self.campagne.id, "colonies": [colonie_incluse.id]},
+        )
+
+        colonie_ids = [ligne["colonie"].colonie_id for ligne in response.context["lignes"]]
+        self.assertEqual(colonie_ids, [colonie_incluse.id])
+
+    def test_fiche_approfondie_utilise_les_criteres_de_la_passe_approfondie(self):
+        colonie = self._creer_colonie(1)
+
+        response = self.client.post(
+            reverse("selection:fiche_approfondie_pdf"),
+            {"campagne": self.campagne.id, "colonies": [colonie.id]},
+        )
+
+        codes = {critere.code for critere in response.context["criteres"]}
+        codes_attendus = set(
+            CritereSelection.objects.filter(type_mesure="PASSE_APPROFONDIE")
+            .values_list("code", flat=True)
+        )
+        self.assertEqual(codes, codes_attendus)
+        self.assertEqual(len(codes_attendus), 5)

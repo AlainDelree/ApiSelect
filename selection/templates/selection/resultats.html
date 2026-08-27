@@ -17,6 +17,8 @@
         .criteres { font-size: 0.9em; }
         form.selecteur-campagne { margin-bottom: 1.5em; }
         .message { padding: 1em; background: #fff3cd; border: 1px solid #ffeeba; border-radius: 4px; }
+        .actions-fiches { margin-bottom: 1.5em; }
+        .actions-fiches a { margin-right: 1.5em; }
     </style>
 </head>
 <body>
@@ -39,6 +41,11 @@
             </select>
             <noscript><button type="submit">Afficher</button></noscript>
         </form>
+
+        <p class="actions-fiches">
+            <a href="{% url 'selection:fiche_rapide' %}?campagne={{ campagne_selectionnee.id }}">Fiche de terrain rapide (PDF)</a>
+            <a href="{% url 'selection:fiche_approfondie_formulaire' %}?campagne={{ campagne_selectionnee.id }}">Fiche de terrain approfondie (PDF)</a>
+        </p>
 
         {% if not lignes %}
             <p class="message">Aucune colonie active enregistrée pour l'instant.</p>

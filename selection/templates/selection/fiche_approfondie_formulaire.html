@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <title>Fiche approfondie — sélection des colonies — ApiSelect</title>
+    <style>
+        body { font-family: sans-serif; margin: 2em; color: #222; }
+        h1 { margin-bottom: 0.2em; }
+        .lien-retour { margin-bottom: 1.5em; display: inline-block; }
+        .colonie { padding: 0.3em 0; }
+        .colonie label { margin-left: 0.4em; }
+        .message { padding: 1em; background: #fff3cd; border: 1px solid #ffeeba; border-radius: 4px; }
+        .selecteur-campagne { margin-bottom: 1.5em; }
+        button { margin-top: 1em; padding: 0.5em 1em; }
+    </style>
+</head>
+<body>
+    <p class="lien-retour"><a href="{% url 'selection:resultats' %}">&larr; Retour aux résultats</a></p>
+    <h1>Fiche approfondie — sélection des colonies</h1>
+    <p>La fiche approfondie ne concerne que les colonies déjà pressenties : cochez
+        celles à inclure avant de générer le PDF.</p>
+
+    {% if not colonies %}
+        <p class="message">Aucune colonie active enregistrée pour l'instant.</p>
+    {% else %}
+        <form method="post" action="{% url 'selection:fiche_approfondie_pdf' %}">
+            {% csrf_token %}
+            {% if campagne_selectionnee %}
+                <input type="hidden" name="campagne" value="{{ campagne_selectionnee.id }}">
+            {% endif %}
+            {% for colonie in colonies %}
+                <div class="colonie">
+                    <input type="checkbox" id="colonie-{{ colonie.colonie_id }}" name="colonies"
+                           value="{{ colonie.colonie_id }}">
+                    <label for="colonie-{{ colonie.colonie_id }}">
+                        {{ colonie.ruche_identifiant }}
+                        {% if colonie.rucher_nom %}— {{ colonie.rucher_nom }}{% endif %}
+                        {% if colonie.reine_identifiant %}— reine {{ colonie.reine_identifiant }}{% endif %}
+                    </label>
+                </div>
+            {% endfor %}
+            <button type="submit">Générer la fiche PDF</button>
+        </form>
+    {% endif %}
+</body>
+</html>
