@@ -35,8 +35,7 @@ WeasyPrint pour cette raison), calendrier (FullCalendar ou vue custom).
 
 ## Documents de référence (locaux, non versionnés)
 `Cours_Apiculture/`, gitignoré (droits d'auteur, dépôt public) :
-- `Elevage_de_reine.pdf` — cours (Maranzan/CRISAB), barème détaillé
-  des 9 critères et protocoles de mesure.
+- `Elevage de reine.pdf` — cours (Maranzan/CRISAB), barème détaillé.
 - `calendrier_élevage_de_reine.ods` — logique de dates en cascade
   d'origine, base du module calendrier.
 Ne jamais committer ni référencer dans une issue.
@@ -47,7 +46,7 @@ chaque visite) santé/propreté/agressivité/tenue au cadre ;
 **approfondie** (colonies pressenties, matériel requis) nettoyage
 (temps)/récolte (kg vs moyenne rucher)/couvain (D×d×nb cadres)/miel
 (kg)/pollen (dm²). Mesure brute + score 1-4 selon barème du cours
-(`Cours_Apiculture/Elevage_de_reine.pdf`, non versionné). Poids 0-10
+(`Cours_Apiculture/Elevage de reine.pdf`, non versionné). Poids 0-10
 par année/campagne (historisé). Seuils éliminatoires optionnels (ex.
 santé, agressivité), indépendants du poids.
 Index = Σ(score×poids)/Σ(poids). Tableau trié par index, détail des
@@ -68,8 +67,8 @@ la saisie du soir.
 
 ## État d'avancement
 Django initialisé (modèle, admin, 3 vues PostgreSQL en lecture, index
-pondéré testé). TypeRuche transformé en table avec alias (migration 0004),
-alias éditables depuis l'admin sans migration de code. CritereSelection
-vide (9 critères à peupler). Aucune donnée réelle saisie (2 colonies en
-attente de visite). Suite : tableau de résultats trié, calendrier, fiches
-PDF (xhtml2pdf).
+pondéré testé). TypeRuche en table avec alias (migration 0004),
+éditables depuis l'admin. CritereSelection peuplé (9 critères,
+migration 0005). Aucune donnée réelle saisie (2 colonies en attente
+de visite). Suite : tableau de résultats trié, calendrier, fiches PDF
+(xhtml2pdf).
