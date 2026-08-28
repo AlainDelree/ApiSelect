@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 from decimal import Decimal
 
+from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
@@ -490,3 +491,33 @@ class FichesTerrainPdfTests(TestCase):
         )
         self.assertEqual(codes, codes_attendus)
         self.assertEqual(len(codes_attendus), 5)
+
+
+class ReineAdminAutocompletionAnneeTests(TestCase):
+    """Le formulaire admin de Reine charge le script JS d'auto-complétion
+    de date_naissance (année seule -> 01/04/AAAA, issue #10). Le
+    comportement JS lui-même (évènement blur) n'est pas exécuté par les
+    tests Django ; il se vérifie manuellement dans le navigateur (voir
+    rapport de l'issue #10)."""
+
+    def setUp(self):
+        self.superuser = get_user_model().objects.create_superuser(
+            username="admin", email="admin@example.com", password="motdepasse",
+        )
+        self.client.force_login(self.superuser)
+
+    def test_page_ajout_reine_charge_le_script_autocompletion(self):
+        response = self.client.get(reverse("admin:selection_reine_add"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "selection/admin/reine_date_naissance.js")
+
+    def test_page_modification_reine_charge_le_script_autocompletion(self):
+        reine = Reine.objects.create(identifiant="R1")
+
+        response = self.client.get(
+            reverse("admin:selection_reine_change", args=[reine.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "selection/admin/reine_date_naissance.js")

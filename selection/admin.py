@@ -55,6 +55,9 @@ class ReineAdmin(admin.ModelAdmin):
     search_fields = ["identifiant", "lignee_male_probable"]
     autocomplete_fields = ["mere", "station_fecondation"]
 
+    class Media:
+        js = ["selection/admin/reine_date_naissance.js"]
+
 
 class ConfigurationColonieInline(admin.TabularInline):
     model = ConfigurationColonie
