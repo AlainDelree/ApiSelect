@@ -186,6 +186,7 @@ class ModeCreationColonie(models.TextChoices):
     ACHAT = "ACHAT", "Achat"
     ESSAIMAGE_NATUREL = "ESSAIMAGE_NATUREL", "Essaimage naturel"
     ESSAIM_ARTIFICIEL = "ESSAIM_ARTIFICIEL", "Essaim artificiel"
+    FUSION = "FUSION", "Fusion / Réunion"
     ORIGINE_INCONNUE = "ORIGINE_INCONNUE", "Origine inconnue"
 
 
