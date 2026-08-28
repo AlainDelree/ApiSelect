@@ -11,6 +11,7 @@ from .models import (
     CritereSelection,
     EtapeCalendrier,
     Mesure,
+    ModeCreationColonie,
     PoidsCritere,
     Reine,
     Ruche,
@@ -490,3 +491,21 @@ class FichesTerrainPdfTests(TestCase):
         )
         self.assertEqual(codes, codes_attendus)
         self.assertEqual(len(codes_attendus), 5)
+
+
+class ModeCreationColonieFusionTests(TestCase):
+    """Vérifie que la colonie accepte "FUSION" comme mode_creation
+    (issue #11) : cas d'une colonie née de la fusion de deux colonies
+    existantes, indépendamment de l'origine de sa reine actuelle."""
+
+    def test_colonie_acceptee_avec_mode_creation_fusion(self):
+        type_ruche = TypeRuche.objects.get(code="DADANT10")
+        ruche = Ruche.objects.create(type_ruche=type_ruche, numero=1)
+
+        colonie = Colonie.objects.create(
+            ruche=ruche, mode_creation=ModeCreationColonie.FUSION,
+            date_creation="2026-01-01", active=True,
+        )
+        colonie.full_clean()
+
+        self.assertEqual(colonie.mode_creation, ModeCreationColonie.FUSION)
