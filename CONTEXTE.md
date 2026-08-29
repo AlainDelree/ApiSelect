@@ -17,9 +17,11 @@ WeasyPrint pour cette raison), calendrier (FullCalendar ou vue custom).
   numéro sans "n°" (ex. "Ruche 3"). Apidea/DH : numéro réutilisable,
   pas d'identité permanente sur les planches.
 - **Colonie** : population vivante à un instant donné, liée à une
-  ruche. Mode de création : achat/essaimage naturel/artificiel/origine
-  inconnue. Historique de configuration (corps + hausses) et de
-  déménagement/remérage à tracer.
+  ruche. Mode de création : achat/essaimage naturel/artificiel/
+  fusion-réunion/origine inconnue (indépendant de l'origine de la
+  reine actuelle, ex. reine achetée dans une colonie issue de fusion).
+  Historique de configuration (corps + hausses) et de déménagement/
+  remérage à tracer.
 - **Reine** : identité généalogique réelle, indépendante de la boîte.
   Liée à sa mère, lignée mâle probable (fécondation en vol =
   probabiliste), station de fécondation, marquage couleur/année.
@@ -55,13 +57,16 @@ starter +4j, finisseur +5j, couveuse +9j, ruchettes +14j, libération
 Multi-campagnes en parallèle. Vue calendrier mensuel + liste de tâches.
 
 ## Fiches de terrain
-Fiche rapide (toutes colonies actives, 4 critères passe rapide, cases
-1-4 à entourer) et fiche approfondie (colonies choisies via
-formulaire, 5 critères, valeur brute à noter). xhtml2pdf.
+Fiche rapide (colonies actives, 4 critères passe rapide, cases 1-4 à
+entourer) et fiche approfondie (colonies choisies via formulaire, 5
+critères, valeur brute à noter). xhtml2pdf.
 
 ## État d'avancement
-Conception initiale complète et implémentée : modèle de données,
-3 vues PostgreSQL, TypeRuche en table (alias éditables), 9 critères
-peuplés, index pondéré testé, tableau de résultats, calendrier
-multi-campagnes, fiches PDF. Aucune donnée réelle saisie (2 colonies
-en attente de visite terrain). Suite : à définir après saisie réelle.
+Conception initiale complète : modèle de données, 3 vues PostgreSQL,
+TypeRuche en table (alias éditables), 9 critères peuplés, index
+pondéré testé, tableau de résultats, calendrier multi-campagnes,
+fiches PDF. Commande globale `apiselect` (lance serveur + navigateur
+sur /admin/). Auto-complétion année seule → 01/04/AAAA sur
+date_naissance (Reine). Saisie réelle en cours : 2 ruchers (Bovesse,
+Anhée), reines A24 et Beelgium_Blanche créées, colonies en cours de
+complétion (numéros de ruche à confirmer sur site).
