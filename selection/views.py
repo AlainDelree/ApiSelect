@@ -191,11 +191,13 @@ def _lignees_par_reine(colonies):
     }
 
 
-def _rendre_pdf(template_name, contexte, nom_fichier):
+def _rendre_pdf(request, template_name, contexte, nom_fichier):
     """Rend un gabarit HTML en PDF via xhtml2pdf (portable Linux/Windows
     sans dépendance système, cf. CONTEXTE.md — préféré à WeasyPrint pour
-    cette raison)."""
-    html = render_to_string(template_name, contexte)
+    cette raison). `request` est transmis pour que les context processors
+    (dont le bandeau de base de test, issue #12) s'appliquent aussi aux
+    fiches imprimées."""
+    html = render_to_string(template_name, contexte, request=request)
     reponse = HttpResponse(content_type="application/pdf")
     reponse["Content-Disposition"] = f'inline; filename="{nom_fichier}"'
     resultat_pisa = pisa.CreatePDF(html, dest=reponse)
@@ -229,7 +231,7 @@ def fiche_rapide_pdf(request):
             for colonie in colonies
         ],
     }
-    return _rendre_pdf("selection/fiche_rapide_pdf.html", contexte, "fiche_rapide.pdf")
+    return _rendre_pdf(request, "selection/fiche_rapide_pdf.html", contexte, "fiche_rapide.pdf")
 
 
 def fiche_approfondie_formulaire(request):
@@ -269,5 +271,5 @@ def fiche_approfondie_pdf(request):
         ],
     }
     return _rendre_pdf(
-        "selection/fiche_approfondie_pdf.html", contexte, "fiche_approfondie.pdf"
+        request, "selection/fiche_approfondie_pdf.html", contexte, "fiche_approfondie.pdf"
     )

@@ -1,0 +1,23 @@
+{% extends "admin/base.html" %}
+
+{% block extrastyle %}
+{{ block.super }}
+{% if BASE_DE_TEST_ACTIVE %}
+<style>
+    body { padding-top: 2.4em; }
+    #bandeau-base-test {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 10000;
+        background: #d9534f; color: #fff; text-align: center;
+        font-weight: bold; padding: 0.5em; font-size: 1em;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    }
+</style>
+{% endif %}
+{% endblock %}
+
+{% block header %}
+{% if BASE_DE_TEST_ACTIVE %}
+<div id="bandeau-base-test">⚠️ BASE DE TEST — données fictives</div>
+{% endif %}
+{{ block.super }}
+{% endblock %}

@@ -1,11 +1,22 @@
 from datetime import date, timedelta
 from decimal import Decimal
+from unittest import mock
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.core.management import call_command
+from django.core.management.base import CommandError
+from django.db import connection
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from .calculs import DECALAGES_JOURS_ETAPES, MesureIndex, calculer_dates_etapes, calculer_index
+from .calculs import (
+    DECALAGES_JOURS_ETAPES,
+    MesureIndex,
+    calculer_dates_etapes,
+    calculer_index,
+    calculer_index_colonie,
+)
+from .gestion_base_test import NOM_RUCHER_TEST
 from .models import (
     CampagneElevage,
     Colonie,
@@ -16,6 +27,7 @@ from .models import (
     PoidsCritere,
     Reine,
     Ruche,
+    Rucher,
     TypeEtapeCalendrier,
     TypeRuche,
     VueColonieActive,
@@ -538,3 +550,150 @@ class ModeCreationColonieFusionTests(TestCase):
         colonie.full_clean()
 
         self.assertEqual(colonie.mode_creation, ModeCreationColonie.FUSION)
+
+
+class BandeauBaseTestTests(TestCase):
+    """Le bandeau d'avertissement « BASE DE TEST » (issue #12) ne doit
+    jamais apparaître quand la base active n'est pas 'apiselect_dev'
+    (comportement par défaut des tests), et doit apparaître dès que
+    settings.BASE_DE_TEST_ACTIVE est vrai — sur l'admin ET sur les vues
+    personnalisées du projet."""
+
+    def setUp(self):
+        self.superuser = get_user_model().objects.create_superuser(
+            username="admin", email="admin@example.com", password="motdepasse",
+        )
+        self.client.force_login(self.superuser)
+
+    def test_bandeau_absent_de_ladmin_par_defaut(self):
+        response = self.client.get(reverse("admin:index"))
+
+        self.assertNotContains(response, "BASE DE TEST")
+
+    def test_bandeau_absent_des_resultats_par_defaut(self):
+        response = self.client.get(reverse("selection:resultats"))
+
+        self.assertNotContains(response, "BASE DE TEST")
+
+    @override_settings(BASE_DE_TEST_ACTIVE=True)
+    def test_bandeau_present_sur_ladmin_si_base_de_test_active(self):
+        response = self.client.get(reverse("admin:index"))
+
+        self.assertContains(response, "BASE DE TEST")
+
+    @override_settings(BASE_DE_TEST_ACTIVE=True)
+    def test_bandeau_present_sur_les_resultats_si_base_de_test_active(self):
+        response = self.client.get(reverse("selection:resultats"))
+
+        self.assertContains(response, "BASE DE TEST")
+
+    @override_settings(BASE_DE_TEST_ACTIVE=True)
+    def test_bandeau_present_sur_le_calendrier_si_base_de_test_active(self):
+        response = self.client.get(reverse("selection:calendrier"))
+
+        self.assertContains(response, "BASE DE TEST")
+
+    @override_settings(BASE_DE_TEST_ACTIVE=True)
+    def test_bandeau_present_sur_les_taches_si_base_de_test_active(self):
+        response = self.client.get(reverse("selection:taches"))
+
+        self.assertContains(response, "BASE DE TEST")
+
+    @override_settings(BASE_DE_TEST_ACTIVE=True)
+    def test_bandeau_present_sur_la_fiche_rapide_pdf_si_base_de_test_active(self):
+        # xhtml2pdf transforme le HTML en PDF binaire : on intercepte le
+        # HTML juste avant conversion plutôt que de tenter de parser le
+        # PDF généré.
+        with mock.patch("selection.views.pisa.CreatePDF") as creer_pdf_mock:
+            creer_pdf_mock.return_value = mock.Mock(err=False)
+            self.client.get(reverse("selection:fiche_rapide"))
+
+        html_genere = creer_pdf_mock.call_args.args[0]
+        self.assertIn("BASE DE TEST", html_genere)
+
+
+class PeuplerDonneesTestCommandTests(TestCase):
+    """Vérifie que `peupler_donnees_test` crée bien le jeu de données
+    fictif attendu (issue #12) : rucher/reines/colonies préfixées TEST-,
+    une colonie exclue par seuil, une colonie sans mesure — et refuse de
+    s'exécuter sur la vraie base 'apiselect'."""
+
+    def test_refuse_de_sexecuter_sur_la_vraie_base(self):
+        nom_original = connection.settings_dict["NAME"]
+        connection.settings_dict["NAME"] = "apiselect"
+        try:
+            with self.assertRaises(CommandError):
+                call_command("peupler_donnees_test")
+        finally:
+            connection.settings_dict["NAME"] = nom_original
+        self.assertFalse(Rucher.objects.filter(nom=NOM_RUCHER_TEST).exists())
+
+    def test_cree_le_rucher_et_les_colonies_fictives(self):
+        call_command("peupler_donnees_test")
+
+        rucher = Rucher.objects.get(nom=NOM_RUCHER_TEST)
+        self.assertEqual(Colonie.objects.filter(ruche__rucher=rucher).count(), 3)
+        self.assertEqual(Reine.objects.filter(identifiant__startswith="TEST-").count(), 3)
+        self.assertTrue(CampagneElevage.objects.filter(nom__startswith="TEST-").exists())
+
+    def test_cree_une_colonie_exclue_par_seuil(self):
+        call_command("peupler_donnees_test")
+
+        campagne = CampagneElevage.objects.get(nom__startswith="TEST-")
+        colonie_exclue = Colonie.objects.get(reine_actuelle__identifiant="TEST-R2")
+        resultat = calculer_index_colonie(colonie_exclue.id, campagne.id)
+
+        self.assertTrue(resultat.exclue)
+        self.assertIsNone(resultat.index)
+
+    def test_cree_une_colonie_sans_mesure(self):
+        call_command("peupler_donnees_test")
+
+        colonie_sans_mesure = Colonie.objects.get(reine_actuelle__identifiant="TEST-R3")
+
+        self.assertFalse(Mesure.objects.filter(colonie=colonie_sans_mesure).exists())
+
+    def test_relance_sans_purge_ne_duplique_pas(self):
+        call_command("peupler_donnees_test")
+        call_command("peupler_donnees_test")
+
+        self.assertEqual(Rucher.objects.filter(nom=NOM_RUCHER_TEST).count(), 1)
+
+
+class PurgerDonneesTestCommandTests(TestCase):
+    """Vérifie que `purger_donnees_test` supprime uniquement les données
+    créées par `peupler_donnees_test`, sans toucher au reste de la base,
+    et refuse de s'exécuter sur la vraie base 'apiselect' (issue #12)."""
+
+    def test_refuse_de_sexecuter_sur_la_vraie_base(self):
+        call_command("peupler_donnees_test")
+
+        nom_original = connection.settings_dict["NAME"]
+        connection.settings_dict["NAME"] = "apiselect"
+        try:
+            with self.assertRaises(CommandError):
+                call_command("purger_donnees_test")
+        finally:
+            connection.settings_dict["NAME"] = nom_original
+        self.assertTrue(Rucher.objects.filter(nom=NOM_RUCHER_TEST).exists())
+
+    def test_supprime_uniquement_les_donnees_de_test(self):
+        type_ruche = TypeRuche.objects.get(code="DADANT10")
+        ruche_reelle = Ruche.objects.create(type_ruche=type_ruche, numero=1)
+        Colonie.objects.create(
+            ruche=ruche_reelle, mode_creation=ModeCreationColonie.ACHAT,
+            date_creation="2026-01-01", active=True,
+        )
+        reine_reelle = Reine.objects.create(identifiant="R26-01")
+        campagne_reelle = CampagneElevage.objects.create(nom="Campagne réelle", annee=2026)
+
+        call_command("peupler_donnees_test")
+        call_command("purger_donnees_test")
+
+        self.assertFalse(Rucher.objects.filter(nom=NOM_RUCHER_TEST).exists())
+        self.assertFalse(Reine.objects.filter(identifiant__startswith="TEST-").exists())
+        self.assertFalse(CampagneElevage.objects.filter(nom__startswith="TEST-").exists())
+        # Les données réelles préexistantes ne sont pas touchées.
+        self.assertTrue(Ruche.objects.filter(pk=ruche_reelle.pk).exists())
+        self.assertTrue(Reine.objects.filter(pk=reine_reelle.pk).exists())
+        self.assertTrue(CampagneElevage.objects.filter(pk=campagne_reelle.pk).exists())

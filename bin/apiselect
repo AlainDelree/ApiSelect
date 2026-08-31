@@ -7,7 +7,12 @@
 # Installation (accès global) : lien symbolique dans un dossier du
 # PATH, ex. ~/bin/apiselect -> ~/ApiSelect/bin/apiselect
 #
-# Usage : apiselect
+# Usage : apiselect [--dev]
+#   --dev   cible la base de test 'apiselect_dev' (données fictives) au
+#           lieu de la vraie base, pour tester l'outil de bout en bout
+#           sans risque (cf. issue #12 et README.md). Applique les
+#           migrations sur apiselect_dev avant de lancer le serveur
+#           (sans effet si déjà à jour).
 # Ctrl+C arrête proprement le serveur (pas de processus orphelin).
 
 set -euo pipefail
@@ -17,9 +22,20 @@ HOST="127.0.0.1"
 PORT="8000"
 URL="http://${HOST}:${PORT}/admin/"
 
+MODE_DEV=0
+if [ "${1:-}" = "--dev" ]; then
+    MODE_DEV=1
+fi
+
 cd "$PROJECT_DIR"
 # shellcheck source=/dev/null
 source "$PROJECT_DIR/venv/bin/activate"
+
+if [ "$MODE_DEV" -eq 1 ]; then
+    export DJANGO_DB_NAME="apiselect_dev"
+    echo "⚠️  Mode DEV : base de données 'apiselect_dev' (données fictives)."
+    python manage.py migrate --noinput
+fi
 
 # --noreload : évite que Django ne forke un second processus (le
 # rechargeur automatique), pour pouvoir arrêter proprement avec un

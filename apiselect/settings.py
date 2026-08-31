@@ -69,6 +69,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'selection.context_processors.base_de_test_active',
             ],
         },
     },
@@ -80,16 +81,29 @@ WSGI_APPLICATION = 'apiselect.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
+# DJANGO_DB_NAME est une variable dédiée à la bascule dev/réel (issue #12),
+# distincte de DB_NAME (nom "normal" lu depuis .env). Elle n'est jamais
+# définie dans .env : seul `apiselect --dev` l'exporte, pour la durée du
+# process, sur 'apiselect_dev'. Sans elle, comportement inchangé (DB_NAME
+# puis 'apiselect' par défaut) — jamais l'inverse.
+NOM_BASE_ACTIVE = os.environ.get('DJANGO_DB_NAME') or os.environ.get('DB_NAME', 'apiselect')
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('DB_NAME', 'apiselect'),
+        'NAME': NOM_BASE_ACTIVE,
         'USER': os.environ.get('DB_USER', 'apiselect'),
         'PASSWORD': os.environ.get('DB_PASSWORD', ''),
         'HOST': os.environ.get('DB_HOST', 'localhost'),
         'PORT': os.environ.get('DB_PORT', '5432'),
     }
 }
+
+# Vrai uniquement quand la base ciblée est explicitement 'apiselect_dev' —
+# source unique pour le bandeau d'avertissement (context processor
+# selection.context_processors.base_de_test_active) et lisible partout
+# (admin ET vues personnalisées) sans détection fragile côté template.
+BASE_DE_TEST_ACTIVE = (NOM_BASE_ACTIVE == 'apiselect_dev')
 
 
 # Password validation
