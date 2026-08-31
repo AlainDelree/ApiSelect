@@ -20,4 +20,11 @@ source "$PROJECT_DIR/venv/bin/activate"
 
 export DJANGO_DB_NAME="apiselect_dev"
 
+# Applique les migrations en attente avant de purger/repeupler (même
+# schéma que 'apiselect --dev') : sans ça, une base apiselect_dev pas
+# encore à jour provoque des erreurs de colonnes manquantes lors de la
+# réinitialisation des données. 'set -e' interrompt le script ici si
+# la migration échoue, avant toute purge des données existantes.
+python manage.py migrate --noinput
+
 python manage.py reinitialiser_donnees_test
