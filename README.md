@@ -67,3 +67,26 @@ d'élevage fictive avec date de référence et des poids de critères.
 
 `purger_donnees_test` supprime uniquement ces données (via le rucher
 « Rucher Test » et le préfixe `TEST-`), sans toucher au reste de la base.
+
+### Tout réinitialiser en une commande (`purgetest`)
+
+Pour repartir d'un jeu de données fictif fraîchement recréé sans taper les
+deux commandes ci-dessus ni définir `DJANGO_DB_NAME` à la main, la commande
+`purgetest` enchaîne purge puis peuplement sur la base `apiselect_dev`,
+depuis n'importe quel répertoire :
+
+```bash
+purgetest
+```
+
+Comme `apiselect`, le script se trouve dans `bin/purgetest` ; pour le rendre
+accessible en tapant simplement `purgetest`, créer un lien symbolique dans
+un dossier déjà présent dans le `PATH` (ex. `~/bin`) :
+
+```bash
+ln -s /home/alain/ApiSelect/bin/purgetest ~/bin/purgetest
+```
+
+`purgetest` ne lance pas de serveur : il purge puis repeuple la base de
+test, affiche le résultat (rucher, colonies, campagne créés) puis se
+termine.

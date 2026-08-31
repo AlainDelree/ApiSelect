@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+#
+# purgetest — purge puis repeuple le jeu de données de test d'ApiSelect
+# (base 'apiselect_dev') en une seule commande, depuis n'importe quel
+# répertoire courant. Ne lance pas de serveur, ne touche jamais à la
+# vraie base 'apiselect' (voir gestion_base_test.py).
+#
+# Installation (accès global) : lien symbolique dans un dossier du
+# PATH, ex. ~/bin/purgetest -> ~/ApiSelect/bin/purgetest
+#
+# Usage : purgetest
+
+set -euo pipefail
+
+PROJECT_DIR="/home/alain/ApiSelect"
+
+cd "$PROJECT_DIR"
+# shellcheck source=/dev/null
+source "$PROJECT_DIR/venv/bin/activate"
+
+export DJANGO_DB_NAME="apiselect_dev"
+
+python manage.py reinitialiser_donnees_test

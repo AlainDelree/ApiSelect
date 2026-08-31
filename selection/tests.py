@@ -832,3 +832,38 @@ class PurgerDonneesTestCommandTests(TestCase):
         self.assertTrue(Ruche.objects.filter(pk=ruche_reelle.pk).exists())
         self.assertTrue(Reine.objects.filter(pk=reine_reelle.pk).exists())
         self.assertTrue(CampagneElevage.objects.filter(pk=campagne_reelle.pk).exists())
+
+
+class ReinitialiserDonneesTestCommandTests(TestCase):
+    """Vérifie que `reinitialiser_donnees_test` enchaîne purge puis
+    peuplement (issue #17) : refuse de s'exécuter sur la vraie base
+    'apiselect', et produit un jeu de données fictif propre même si un
+    jeu précédent existait déjà."""
+
+    def test_refuse_de_sexecuter_sur_la_vraie_base(self):
+        nom_original = connection.settings_dict["NAME"]
+        connection.settings_dict["NAME"] = "apiselect"
+        try:
+            with self.assertRaises(CommandError):
+                call_command("reinitialiser_donnees_test")
+        finally:
+            connection.settings_dict["NAME"] = nom_original
+        self.assertFalse(Rucher.objects.filter(nom=NOM_RUCHER_TEST).exists())
+
+    def test_reinitialise_le_jeu_de_donnees_fictif(self):
+        call_command("reinitialiser_donnees_test")
+
+        rucher = Rucher.objects.get(nom=NOM_RUCHER_TEST)
+        self.assertEqual(Colonie.objects.filter(ruche__rucher=rucher).count(), 3)
+        self.assertEqual(Reine.objects.filter(identifiant__startswith="TEST-").count(), 3)
+        self.assertTrue(CampagneElevage.objects.filter(nom__startswith="TEST-").exists())
+
+    def test_purge_lancien_jeu_avant_de_repeupler(self):
+        call_command("peupler_donnees_test")
+        ancienne_reine_pk = Reine.objects.get(identifiant="TEST-R1").pk
+
+        call_command("reinitialiser_donnees_test")
+
+        self.assertEqual(Rucher.objects.filter(nom=NOM_RUCHER_TEST).count(), 1)
+        self.assertFalse(Reine.objects.filter(pk=ancienne_reine_pk).exists())
+        self.assertEqual(Reine.objects.filter(identifiant__startswith="TEST-").count(), 3)
