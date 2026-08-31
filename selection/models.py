@@ -320,6 +320,30 @@ class CampagneElevage(models.Model):
     def __str__(self):
         return self.nom
 
+    @property
+    def taux_reussite(self):
+        """Taux de réussite de l'élevage de cellules royales : nombre de CR
+        introduites dans les Apidea (étape GARNIR_APIDEA.nombre_cr) divisé
+        par le nombre de CR obtenues sur la ruche orpheline (étape
+        RUCHE_ORPHELINE.nombre_cr). Retourne None (« non calculable ») si
+        l'une des deux étapes est absente ou que son nombre_cr n'est pas
+        renseigné, ou si le nombre de CR obtenues est nul (pas de division
+        par zéro).
+        """
+        etape_obtenues = self.etapes.filter(
+            type_etape=TypeEtapeCalendrier.RUCHE_ORPHELINE,
+        ).first()
+        etape_introduites = self.etapes.filter(
+            type_etape=TypeEtapeCalendrier.GARNIR_APIDEA,
+        ).first()
+        if (
+            etape_obtenues is None or etape_introduites is None
+            or etape_obtenues.nombre_cr is None or etape_introduites.nombre_cr is None
+            or etape_obtenues.nombre_cr == 0
+        ):
+            return None
+        return etape_introduites.nombre_cr / etape_obtenues.nombre_cr
+
 
 class TypeEtapeCalendrier(models.TextChoices):
     """Étapes du calendrier d'élevage reflétant la méthode réelle d'Alain
@@ -329,6 +353,7 @@ class TypeEtapeCalendrier(models.TextChoices):
     contrôle des naissances séparés."""
 
     ELEVAGE_MALES = "ELEVAGE_MALES", "Élevage des mâles (saturation)"
+    ORPHELINAGE = "ORPHELINAGE", "Orphelinage (règle des 9 jours)"
     PICKING = "PICKING", "Picking (greffage des larves)"
     RUCHE_ORPHELINE = "RUCHE_ORPHELINE", "Ruche orpheline"
     GARNIR_APIDEA = "GARNIR_APIDEA", "Garnir les Apidea"
@@ -359,6 +384,19 @@ class EtapeCalendrier(models.Model):
         null=True, blank=True,
         help_text="Date effectivement observée, si différente de la date "
                    "prévue (pour tracer les écarts).",
+    )
+    ruche = models.ForeignKey(
+        Ruche, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="etapes_calendrier",
+        help_text="Ruche ayant servi de colonie orpheline (pertinent "
+                   "surtout sur les étapes Orphelinage et Ruche orpheline).",
+    )
+    nombre_cr = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        help_text="Nombre de cellules royales — obtenues sur l'étape Ruche "
+                   "orpheline, ou introduites dans les Apidea sur l'étape "
+                   "Garnir les Apidea (même champ générique pour les deux "
+                   "usages selon l'étape).",
     )
     notes = models.TextField(blank=True)
 

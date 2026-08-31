@@ -129,11 +129,17 @@ def calculer_index_colonie(colonie_id: int, campagne_id: int) -> ResultatIndex:
 # ELEVAGE_MALES (-16j, saturation) sont inchangés de l'issue #7. Les
 # décalages GARNIR_APIDEA (+14j) et CONTROLE_PONTE_GRILLE (+25j) sont
 # ceux fournis par Alain pour sa méthode réelle (issue #14), pas des
-# cellules de l'ODS.
+# cellules de l'ODS. Le décalage ORPHELINAGE (-5j) est ajouté par l'issue
+# #16 : « loi des 9 jours » du cours Maranzan/CRISAB — 3 jours de stade œuf
+# + 6 jours de couvain ouvert, période après laquelle la colonie rendue
+# orpheline n'a plus de couvain ouvrable pour élever elle-même une reine et
+# est donc réellement prête à prendre en charge le greffage (PICKING).
+# Calcul : PICKING (+4j) − 9j = -5j depuis la ponte de référence.
 # ---------------------------------------------------------------------------
 
 DECALAGES_JOURS_ETAPES = {
     "ELEVAGE_MALES": -16,
+    "ORPHELINAGE": -5,
     "PICKING": 4,
     "RUCHE_ORPHELINE": 4,
     "GARNIR_APIDEA": 14,

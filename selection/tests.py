@@ -237,6 +237,11 @@ class CalculerDatesEtapesTests(TestCase):
     def test_toutes_les_etapes_du_modele_sont_calculees(self):
         self.assertEqual(set(self.dates), {code for code, _ in TypeEtapeCalendrier.choices})
 
+    def test_orphelinage_cinq_jours_avant_la_ponte(self):
+        # Loi des 9 jours (issue #16) : PICKING (+4j) - 9j = -5j, pour que
+        # la colonie orpheline n'ait plus de couvain ouvrable à J-picking.
+        self.assertEqual(self.dates["ORPHELINAGE"], self.date_ponte - timedelta(days=5))
+
     def test_picking_quatre_jours_apres_la_ponte(self):
         self.assertEqual(self.dates["PICKING"], date(2022, 6, 9))
 
@@ -264,6 +269,7 @@ class CalculerDatesEtapesTests(TestCase):
         # être volontaire.
         self.assertEqual(DECALAGES_JOURS_ETAPES, {
             "ELEVAGE_MALES": -16,
+            "ORPHELINAGE": -5,
             "PICKING": 4,
             "RUCHE_ORPHELINE": 4,
             "GARNIR_APIDEA": 14,
@@ -316,8 +322,10 @@ class RecalculAutomatiqueEtapesTests(TestCase):
 
         self.assertEqual(picking_1.date_prevue, date(2022, 6, 9))
         self.assertEqual(picking_2.date_prevue, date(2022, 6, 24))
-        self.assertEqual(EtapeCalendrier.objects.filter(campagne=campagne_1).count(), 4)
-        self.assertEqual(EtapeCalendrier.objects.filter(campagne=campagne_2).count(), 4)
+        # elevage_males_actif=False par défaut (issue #14) : une étape de
+        # moins que le nombre total de types (6 depuis l'issue #16).
+        self.assertEqual(EtapeCalendrier.objects.filter(campagne=campagne_1).count(), 5)
+        self.assertEqual(EtapeCalendrier.objects.filter(campagne=campagne_2).count(), 5)
 
     def test_marquage_realisee_preserve_par_un_recalcul_ulterieur(self):
         campagne = CampagneElevage.objects.create(
@@ -376,6 +384,74 @@ class ElevageMalesFacultatifTests(TestCase):
         self.assertFalse(
             campagne.etapes.filter(type_etape=TypeEtapeCalendrier.ELEVAGE_MALES).exists()
         )
+
+
+class TauxReussiteCrTests(TestCase):
+    """Vérifie CampagneElevage.taux_reussite (issue #16) : CR introduites
+    dans les Apidea (étape GARNIR_APIDEA.nombre_cr) divisé par CR obtenues
+    sur la ruche orpheline (étape RUCHE_ORPHELINE.nombre_cr), avec gestion
+    propre des cas où le calcul est impossible (pas de division par
+    zéro)."""
+
+    def setUp(self):
+        self.campagne = CampagneElevage.objects.create(
+            nom="Campagne E", annee=2022, date_reference=date(2022, 6, 5),
+        )
+
+    def test_taux_reussite_cas_normal(self):
+        etape_obtenues = self.campagne.etapes.get(
+            type_etape=TypeEtapeCalendrier.RUCHE_ORPHELINE,
+        )
+        etape_obtenues.nombre_cr = 10
+        etape_obtenues.save()
+        etape_introduites = self.campagne.etapes.get(
+            type_etape=TypeEtapeCalendrier.GARNIR_APIDEA,
+        )
+        etape_introduites.nombre_cr = 8
+        etape_introduites.save()
+
+        self.assertEqual(self.campagne.taux_reussite, 0.8)
+
+    def test_taux_reussite_non_calculable_si_donnees_manquantes(self):
+        # Aucun nombre_cr renseigné sur aucune des deux étapes.
+        self.assertIsNone(self.campagne.taux_reussite)
+
+    def test_taux_reussite_non_calculable_si_une_seule_valeur_renseignee(self):
+        etape_obtenues = self.campagne.etapes.get(
+            type_etape=TypeEtapeCalendrier.RUCHE_ORPHELINE,
+        )
+        etape_obtenues.nombre_cr = 10
+        etape_obtenues.save()
+        # GARNIR_APIDEA.nombre_cr non renseigné.
+
+        self.assertIsNone(self.campagne.taux_reussite)
+
+    def test_taux_reussite_non_calculable_si_zero_cr_obtenues(self):
+        etape_obtenues = self.campagne.etapes.get(
+            type_etape=TypeEtapeCalendrier.RUCHE_ORPHELINE,
+        )
+        etape_obtenues.nombre_cr = 0
+        etape_obtenues.save()
+        etape_introduites = self.campagne.etapes.get(
+            type_etape=TypeEtapeCalendrier.GARNIR_APIDEA,
+        )
+        etape_introduites.nombre_cr = 0
+        etape_introduites.save()
+
+        self.assertIsNone(self.campagne.taux_reussite)
+
+    def test_champ_ruche_associable_a_une_etape(self):
+        type_ruche = TypeRuche.objects.get(code="DADANT10")
+        ruche = Ruche.objects.create(type_ruche=type_ruche, numero=42)
+        etape = self.campagne.etapes.get(type_etape=TypeEtapeCalendrier.RUCHE_ORPHELINE)
+        etape.ruche = ruche
+        etape.nombre_cr = 5
+        etape.full_clean()
+        etape.save()
+
+        etape.refresh_from_db()
+        self.assertEqual(etape.ruche, ruche)
+        self.assertEqual(etape.nombre_cr, 5)
 
 
 class CalendrierEtTachesViewsTests(TestCase):

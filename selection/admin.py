@@ -83,13 +83,19 @@ class ColonieAdmin(admin.ModelAdmin):
 
 class EtapeCalendrierInline(admin.TabularInline):
     """Étapes calculées automatiquement (cf. selection/signals.py) : la
-    date prévue et le type d'étape sont en lecture seule ici, seuls
-    `realisee`/`date_reelle`/`notes` se saisissent à la main."""
+    date prévue et le type d'étape sont en lecture seule ici. `ruche` et
+    `nombre_cr` (issue #16) se saisissent à la main, surtout sur les
+    étapes Ruche orpheline (CR obtenues) et Garnir les Apidea (CR
+    introduites) — cf. CampagneElevage.taux_reussite."""
 
     model = EtapeCalendrier
     extra = 0
-    fields = ["type_etape", "date_prevue", "realisee", "date_reelle", "notes"]
+    fields = [
+        "type_etape", "date_prevue", "realisee", "date_reelle", "ruche",
+        "nombre_cr", "notes",
+    ]
     readonly_fields = ["type_etape", "date_prevue"]
+    autocomplete_fields = ["ruche"]
     can_delete = False
     ordering = ["date_prevue"]
 
@@ -101,20 +107,33 @@ class EtapeCalendrierInline(admin.TabularInline):
 class CampagneElevageAdmin(admin.ModelAdmin):
     list_display = [
         "nom", "annee", "date_reference", "date_debut", "date_fin",
-        "elevage_males_actif",
+        "elevage_males_actif", "taux_reussite_affichage",
     ]
     list_filter = ["annee", "elevage_males_actif"]
     search_fields = ["nom"]
+    readonly_fields = ["taux_reussite_affichage"]
     inlines = [EtapeCalendrierInline]
+
+    @admin.display(description="Taux de réussite CR")
+    def taux_reussite_affichage(self, obj):
+        """CR introduites dans les Apidea ÷ CR obtenues sur la ruche
+        orpheline (issue #16) — cf. CampagneElevage.taux_reussite."""
+        taux = obj.taux_reussite
+        if taux is None:
+            return "non calculable"
+        return f"{taux:.0%}"
 
 
 @admin.register(EtapeCalendrier)
 class EtapeCalendrierAdmin(admin.ModelAdmin):
-    list_display = ["campagne", "type_etape", "date_prevue", "realisee", "date_reelle"]
+    list_display = [
+        "campagne", "type_etape", "date_prevue", "realisee", "date_reelle",
+        "ruche", "nombre_cr",
+    ]
     list_filter = ["type_etape", "realisee", "campagne"]
-    list_editable = ["realisee", "date_reelle"]
+    list_editable = ["realisee", "date_reelle", "nombre_cr"]
     search_fields = ["campagne__nom"]
-    autocomplete_fields = ["campagne"]
+    autocomplete_fields = ["campagne", "ruche"]
 
 
 @admin.register(CritereSelection)
