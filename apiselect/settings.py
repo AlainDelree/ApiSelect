@@ -146,3 +146,12 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+# Session admin (issue #13) : usage local mono-utilisateur, l'admin Django
+# est rouvert des dizaines de fois par jour en dev/test. L'authentification
+# reste active (seule vraie barrière de protection des données) — on
+# allonge simplement sa durée pour ne pas avoir à se reconnecter à chaque
+# redémarrage du serveur ni à chaque fermeture du navigateur.
+SESSION_COOKIE_AGE = 31536000  # 1 an, en secondes
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False  # la session survit à la fermeture du navigateur
