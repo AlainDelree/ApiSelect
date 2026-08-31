@@ -302,6 +302,14 @@ class CampagneElevage(models.Model):
                    "(cf. EtapeCalendrier). La renseigner ou la modifier "
                    "recalcule automatiquement toutes les dates prévues.",
     )
+    elevage_males_actif = models.BooleanField(
+        default=False,
+        help_text="Coché si l'élevage des mâles (saturation) est pratiqué "
+                   "pour cette campagne. Décoché par défaut : avec un "
+                   "nombre de ruches limité, Alain ne le pratique pas "
+                   "encore (issue #14) — l'étape ELEVAGE_MALES n'est créée "
+                   "que si ce champ est coché.",
+    )
     notes = models.TextField(blank=True)
 
     class Meta:
@@ -314,16 +322,20 @@ class CampagneElevage(models.Model):
 
 
 class TypeEtapeCalendrier(models.TextChoices):
+    """Étapes du calendrier d'élevage reflétant la méthode réelle d'Alain
+    (issue #14) : pas de starter séparé (fusionné avec l'élevage jusqu'à
+    operculation sur la ruche orpheline), pas de couveuse, distribution
+    directe des cellules royales dans les Apidea, pas de libération ni de
+    contrôle des naissances séparés."""
+
     ELEVAGE_MALES = "ELEVAGE_MALES", "Élevage des mâles (saturation)"
     PICKING = "PICKING", "Picking (greffage des larves)"
-    STARTER = "STARTER", "Starter"
-    FINISSEUR = "FINISSEUR", "Finisseur"
-    COUVEUSE = "COUVEUSE", "Couveuse"
-    RUCHETTES = "RUCHETTES", "Peuplement des ruchettes"
-    LIBERATION = "LIBERATION", "Libération des ruchettes"
-    CONTROLE_NAISSANCE = "CONTROLE_NAISSANCE", "Contrôle des naissances"
-    DEBUT_PONTE = "DEBUT_PONTE", "Début de ponte"
-    CONTROLE_PONTE = "CONTROLE_PONTE", "Contrôle de ponte"
+    RUCHE_ORPHELINE = "RUCHE_ORPHELINE", "Ruche orpheline"
+    GARNIR_APIDEA = "GARNIR_APIDEA", "Garnir les Apidea"
+    CONTROLE_PONTE_GRILLE = (
+        "CONTROLE_PONTE_GRILLE",
+        "Contrôle ponte et pose de la grille anti-essaimage",
+    )
 
 
 class EtapeCalendrier(models.Model):

@@ -51,10 +51,19 @@ versionné). Poids 0-10 par campagne (historisé). Seuils éliminatoires
 optionnels. Index = Σ(score×poids)/Σ(poids). Tableau trié par index.
 
 ## Calendrier d'élevage
-Cascade de dates depuis l'ODS (ponte = jour 0 : mâles -16j, picking/
-starter +4j, finisseur +5j, couveuse +9j, ruchettes +14j, libération
-+17j, contrôle naissance +19j, début ponte +25j, contrôle ponte +26j).
-Multi-campagnes en parallèle. Vue calendrier mensuel + liste de tâches.
+Cascade de dates reflétant la méthode réelle d'Alain (issue #14, révise
+l'issue #7 qui avait été calquée à tort sur le cours générique) : pas de
+starter séparé (greffage direct dans une ruche orpheline qui élève les
+cellules royales jusqu'à operculation et au-delà), pas de couveuse (les
+cellules restent sur la colonie orpheline), distribution directe dans
+les Apidea (pas de ruchettes), pas de libération ni de contrôle des
+naissances séparés. Ponte = jour 0 : mâles -16j (facultatif, activé par
+campagne — pas encore pratiqué avec le nombre de ruches actuel), picking
++4j, ruche orpheline +4j, garnir les Apidea +14j, contrôle ponte et pose
+de la grille anti-essaimage +25j. Multi-campagnes en parallèle. Vue
+calendrier mensuel + liste de tâches. La constitution des Apidea
+eux-mêmes (peuplement, confinement) n'a pas de date fixe par campagne et
+n'est pas modélisée dans cette cascade.
 
 ## Fiches de terrain
 Fiche rapide (colonies actives, 4 critères passe rapide, cases 1-4 à

@@ -99,8 +99,11 @@ class EtapeCalendrierInline(admin.TabularInline):
 
 @admin.register(CampagneElevage)
 class CampagneElevageAdmin(admin.ModelAdmin):
-    list_display = ["nom", "annee", "date_reference", "date_debut", "date_fin"]
-    list_filter = ["annee"]
+    list_display = [
+        "nom", "annee", "date_reference", "date_debut", "date_fin",
+        "elevage_males_actif",
+    ]
+    list_filter = ["annee", "elevage_males_actif"]
     search_fields = ["nom"]
     inlines = [EtapeCalendrierInline]
 

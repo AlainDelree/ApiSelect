@@ -221,11 +221,14 @@ class ResultatsSelectionViewTests(TestCase):
 
 
 class CalculerDatesEtapesTests(TestCase):
-    """Vérifie la cascade de dates contre l'exemple réel du fichier ODS
-    source (Cours_Apiculture/calendrier élevage de reine.ods, non
-    versionné — cf. rapport de clôture de l'issue #7 pour le détail des
-    cellules relevées). Ponte le 5/06/2022 -> picking le 9/06/2022,
-    reste de la cascade documentée en commentaire dans calculs.py."""
+    """Vérifie la cascade de dates contre la méthode réelle d'Alain
+    (issue #14) : pas de starter/finisseur/couveuse séparés (fusionnés en
+    "ruche orpheline"), pas de ruchettes/libération/contrôle des
+    naissances (distribution directe des CR dans les Apidea), pas de
+    début de ponte séparé (fusionné avec le contrôle de ponte et la pose
+    de la grille anti-essaimage). Ponte le 5/06/2022 -> picking le
+    9/06/2022, reste de la cascade documentée en commentaire dans
+    calculs.py."""
 
     def setUp(self):
         self.date_ponte = date(2022, 6, 5)
@@ -237,49 +240,34 @@ class CalculerDatesEtapesTests(TestCase):
     def test_picking_quatre_jours_apres_la_ponte(self):
         self.assertEqual(self.dates["PICKING"], date(2022, 6, 9))
 
-    def test_starter_le_meme_jour_que_le_picking(self):
-        self.assertEqual(self.dates["STARTER"], self.dates["PICKING"])
+    def test_ruche_orpheline_le_meme_jour_que_le_picking(self):
+        # Pas de starter séparé : greffage direct dans la ruche orpheline
+        # qui élève les cellules royales jusqu'à operculation et au-delà.
+        self.assertEqual(self.dates["RUCHE_ORPHELINE"], self.dates["PICKING"])
 
-    def test_finisseur_un_jour_apres_le_picking(self):
-        self.assertEqual(self.dates["FINISSEUR"], date(2022, 6, 10))
+    def test_garnir_apidea(self):
+        # Distribution directe des cellules royales dans les Apidea (pas
+        # de couveuse ni de ruchettes intermédiaires).
+        self.assertEqual(self.dates["GARNIR_APIDEA"], date(2022, 6, 19))
 
-    def test_couveuse(self):
-        self.assertEqual(self.dates["COUVEUSE"], date(2022, 6, 14))
-
-    def test_peuplement_ruchettes(self):
-        self.assertEqual(self.dates["RUCHETTES"], date(2022, 6, 19))
-
-    def test_liberation(self):
-        self.assertEqual(self.dates["LIBERATION"], date(2022, 6, 22))
-
-    def test_controle_naissance(self):
-        self.assertEqual(self.dates["CONTROLE_NAISSANCE"], date(2022, 6, 24))
-
-    def test_debut_ponte(self):
-        self.assertEqual(self.dates["DEBUT_PONTE"], date(2022, 6, 30))
-
-    def test_controle_ponte(self):
-        self.assertEqual(self.dates["CONTROLE_PONTE"], date(2022, 7, 1))
+    def test_controle_ponte_et_grille(self):
+        self.assertEqual(self.dates["CONTROLE_PONTE_GRILLE"], date(2022, 6, 30))
 
     def test_elevage_males_seize_jours_avant_la_ponte(self):
         # Décalage -16j : principe de saturation du cours (CONTEXTE.md),
-        # pas une cellule calculée de l'ODS — cf. calculs.py.
+        # inchangé par l'issue #14 — cf. calculs.py.
         self.assertEqual(self.dates["ELEVAGE_MALES"], self.date_ponte - timedelta(days=16))
 
     def test_decalages_geles_contre_regression_silencieuse(self):
-        # Verrouille les valeurs exactes relevées dans l'ODS : toute
-        # modification de DECALAGES_JOURS_ETAPES doit être volontaire.
+        # Verrouille les valeurs exactes de la méthode réelle d'Alain
+        # (issue #14) : toute modification de DECALAGES_JOURS_ETAPES doit
+        # être volontaire.
         self.assertEqual(DECALAGES_JOURS_ETAPES, {
             "ELEVAGE_MALES": -16,
             "PICKING": 4,
-            "STARTER": 4,
-            "FINISSEUR": 5,
-            "COUVEUSE": 9,
-            "RUCHETTES": 14,
-            "LIBERATION": 17,
-            "CONTROLE_NAISSANCE": 19,
-            "DEBUT_PONTE": 25,
-            "CONTROLE_PONTE": 26,
+            "RUCHE_ORPHELINE": 4,
+            "GARNIR_APIDEA": 14,
+            "CONTROLE_PONTE_GRILLE": 25,
         })
 
 
@@ -293,7 +281,9 @@ class RecalculAutomatiqueEtapesTests(TestCase):
         campagne = CampagneElevage.objects.create(
             nom="Campagne A", annee=2022, date_reference=date(2022, 6, 5),
         )
-        self.assertEqual(campagne.etapes.count(), len(TypeEtapeCalendrier.choices))
+        # elevage_males_actif=False par défaut (issue #14) : une étape de
+        # moins que le nombre total de types.
+        self.assertEqual(campagne.etapes.count(), len(TypeEtapeCalendrier.choices) - 1)
         picking = campagne.etapes.get(type_etape=TypeEtapeCalendrier.PICKING)
         self.assertEqual(picking.date_prevue, date(2022, 6, 9))
 
@@ -311,7 +301,7 @@ class RecalculAutomatiqueEtapesTests(TestCase):
         picking = campagne.etapes.get(type_etape=TypeEtapeCalendrier.PICKING)
         self.assertEqual(picking.date_prevue, date(2022, 7, 9))
         # Toujours une seule ligne par (campagne, étape), pas de doublon.
-        self.assertEqual(campagne.etapes.count(), len(TypeEtapeCalendrier.choices))
+        self.assertEqual(campagne.etapes.count(), len(TypeEtapeCalendrier.choices) - 1)
 
     def test_plusieurs_campagnes_en_parallele_sans_interference(self):
         campagne_1 = CampagneElevage.objects.create(
@@ -326,8 +316,8 @@ class RecalculAutomatiqueEtapesTests(TestCase):
 
         self.assertEqual(picking_1.date_prevue, date(2022, 6, 9))
         self.assertEqual(picking_2.date_prevue, date(2022, 6, 24))
-        self.assertEqual(EtapeCalendrier.objects.filter(campagne=campagne_1).count(), 10)
-        self.assertEqual(EtapeCalendrier.objects.filter(campagne=campagne_2).count(), 10)
+        self.assertEqual(EtapeCalendrier.objects.filter(campagne=campagne_1).count(), 4)
+        self.assertEqual(EtapeCalendrier.objects.filter(campagne=campagne_2).count(), 4)
 
     def test_marquage_realisee_preserve_par_un_recalcul_ulterieur(self):
         campagne = CampagneElevage.objects.create(
@@ -347,6 +337,45 @@ class RecalculAutomatiqueEtapesTests(TestCase):
         self.assertTrue(picking.realisee)
         self.assertEqual(picking.date_reelle, date(2022, 6, 10))
         self.assertEqual(picking.date_prevue, date(2022, 6, 9))
+
+
+class ElevageMalesFacultatifTests(TestCase):
+    """Vérifie le caractère facultatif de l'étape ELEVAGE_MALES (issue
+    #14) : non créée par défaut (elevage_males_actif=False), créée si le
+    champ est coché, supprimée si le champ repasse à décoché plutôt que
+    laissée orpheline avec une date obsolète."""
+
+    def test_etape_non_creee_par_defaut(self):
+        campagne = CampagneElevage.objects.create(
+            nom="Campagne sans mâles", annee=2022, date_reference=date(2022, 6, 5),
+        )
+        self.assertFalse(
+            campagne.etapes.filter(type_etape=TypeEtapeCalendrier.ELEVAGE_MALES).exists()
+        )
+
+    def test_etape_creee_si_champ_coche(self):
+        campagne = CampagneElevage.objects.create(
+            nom="Campagne avec mâles", annee=2022, date_reference=date(2022, 6, 5),
+            elevage_males_actif=True,
+        )
+        etape = campagne.etapes.get(type_etape=TypeEtapeCalendrier.ELEVAGE_MALES)
+        self.assertEqual(etape.date_prevue, date(2022, 6, 5) - timedelta(days=16))
+
+    def test_etape_supprimee_si_champ_decoche_apres_coup(self):
+        campagne = CampagneElevage.objects.create(
+            nom="Campagne C", annee=2022, date_reference=date(2022, 6, 5),
+            elevage_males_actif=True,
+        )
+        self.assertTrue(
+            campagne.etapes.filter(type_etape=TypeEtapeCalendrier.ELEVAGE_MALES).exists()
+        )
+
+        campagne.elevage_males_actif = False
+        campagne.save()
+
+        self.assertFalse(
+            campagne.etapes.filter(type_etape=TypeEtapeCalendrier.ELEVAGE_MALES).exists()
+        )
 
 
 class CalendrierEtTachesViewsTests(TestCase):
@@ -376,7 +405,9 @@ class CalendrierEtTachesViewsTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         etapes = list(response.context["etapes"])
-        self.assertEqual(len(etapes), len(TypeEtapeCalendrier.choices))
+        # elevage_males_actif=False par défaut (issue #14) : une étape de
+        # moins que le nombre total de types.
+        self.assertEqual(len(etapes), len(TypeEtapeCalendrier.choices) - 1)
         dates = [etape.date_prevue for etape in etapes]
         self.assertEqual(dates, sorted(dates))
 
@@ -389,7 +420,7 @@ class CalendrierEtTachesViewsTests(TestCase):
 
         etapes = list(response.context["etapes"])
         self.assertNotIn(picking, etapes)
-        self.assertEqual(len(etapes), len(TypeEtapeCalendrier.choices) - 1)
+        self.assertEqual(len(etapes), len(TypeEtapeCalendrier.choices) - 2)
 
 
 class FichesTerrainPdfTests(TestCase):

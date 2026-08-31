@@ -112,41 +112,32 @@ def calculer_index_colonie(colonie_id: int, campagne_id: int) -> ResultatIndex:
 
 
 # ---------------------------------------------------------------------------
-# Calendrier d'élevage : dates en cascade (issue #7)
+# Calendrier d'élevage : dates en cascade (issue #7, révisé issue #14)
 #
-# Logique reprise du fichier source Cours_Apiculture/calendrier élevage de
-# reine.ods (gitignoré, cf. CONTEXTE.md — jamais committé). Sur la feuille
-# "Calendrier" de ce fichier, toutes les dates de la grille se déduisent par
-# une cascade de +1 jour à partir d'une cellule ancre (B14), elle-même égale
-# à la date de ponte si elle est saisie, sinon à la date de picking moins 4
-# jours (formule =IF(ponte>0; ponte; picking-4)). La feuille "récapitulatif"
-# nomme chaque étape utile du cours en référençant une cellule précise de
-# cette grille. Les décalages ci-dessous sont les écarts en jours, relevés
-# cellule par cellule dans l'ODS, entre chaque étape nommée et cette date de
-# ponte (jour 0) :
-#   B14 (ponte, jour 0) -> F14 (picking/enlarvement, jour+4)
-#   -> A22 (finisseur, jour+5) -> E22 (couveuse, jour+9)
-#   -> D30 (peuplement ruchettes, jour+14) -> A38 (libération, jour+17)
-#   -> C38 (contrôle naissances, jour+19) -> C46 (début ponte, jour+25)
-#   -> D46 (contrôle ponte, jour+26)
-# L'étape "élevage des mâles" n'a PAS de cellule calculée dans l'ODS (qui ne
-# porte qu'un champ texte libre "Mâle :" pour la lignée) : son décalage de
-# -16 jours reprend le principe de saturation de mâles décrit dans le cours
-# et résumé dans CONTEXTE.md, pas une formule du tableur — cf. rapport de
-# clôture de l'issue #7 pour cette ambiguïté.
+# La première version (issue #7) reprenait la logique du cours générique
+# (Maranzan/CRISAB) et du fichier Cours_Apiculture/calendrier élevage de
+# reine.ods (gitignoré, cf. CONTEXTE.md — jamais committé), sans vérifier
+# qu'elle correspondait à la pratique réelle d'Alain. L'issue #14 corrige
+# les décalages pour refléter sa méthode : pas de starter séparé (il
+# greffe directement dans une ruche orpheline qui élève les cellules
+# royales jusqu'à operculation et au-delà, fusion starter+finisseur), pas
+# de couveuse (les cellules restent sur la colonie orpheline jusqu'à
+# distribution), distribution directe dans les Apidea après la période de
+# fragilité (nymphose ~J10-J13) et avant la naissance (~J16), pas de
+# libération ni de contrôle des naissances séparés. Les décalages
+# PICKING/RUCHE_ORPHELINE (+4j, greffage d'une larve de 12-36h à J4) et
+# ELEVAGE_MALES (-16j, saturation) sont inchangés de l'issue #7. Les
+# décalages GARNIR_APIDEA (+14j) et CONTROLE_PONTE_GRILLE (+25j) sont
+# ceux fournis par Alain pour sa méthode réelle (issue #14), pas des
+# cellules de l'ODS.
 # ---------------------------------------------------------------------------
 
 DECALAGES_JOURS_ETAPES = {
     "ELEVAGE_MALES": -16,
     "PICKING": 4,
-    "STARTER": 4,
-    "FINISSEUR": 5,
-    "COUVEUSE": 9,
-    "RUCHETTES": 14,
-    "LIBERATION": 17,
-    "CONTROLE_NAISSANCE": 19,
-    "DEBUT_PONTE": 25,
-    "CONTROLE_PONTE": 26,
+    "RUCHE_ORPHELINE": 4,
+    "GARNIR_APIDEA": 14,
+    "CONTROLE_PONTE_GRILLE": 25,
 }
 
 
