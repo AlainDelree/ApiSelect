@@ -422,6 +422,34 @@ class CalendrierEtTachesViewsTests(TestCase):
         self.assertNotIn(picking, etapes)
         self.assertEqual(len(etapes), len(TypeEtapeCalendrier.choices) - 2)
 
+    def test_calendrier_expose_une_couleur_distincte_par_etape(self):
+        """Palette fixe par type d'étape (issue #15) : chaque étape du
+        contexte porte une couleur, et PICKING/GARNIR_APIDEA se
+        distinguent des 3 autres étapes."""
+        response = self.client.get(reverse("selection:calendrier"), {"annee": 2022, "mois": 6})
+
+        etapes = [
+            etape
+            for semaine in response.context["semaines"]
+            for jour in semaine
+            for etape in jour["etapes"]
+        ]
+        self.assertTrue(etapes)
+        for etape in etapes:
+            self.assertTrue(etape.couleur["fond"].startswith("#"))
+            self.assertTrue(etape.couleur["texte"].startswith("#"))
+
+        couleurs = {etape.type_etape: etape.couleur["fond"] for etape in etapes}
+        self.assertEqual(len(set(couleurs.values())), len(couleurs))
+
+    def test_taches_expose_une_couleur_par_etape(self):
+        response = self.client.get(reverse("selection:taches"))
+
+        etapes = list(response.context["etapes"])
+        self.assertTrue(etapes)
+        for etape in etapes:
+            self.assertTrue(etape.couleur["fond"].startswith("#"))
+
 
 class FichesTerrainPdfTests(TestCase):
     """Tests des fiches de terrain PDF (issue #8) : génération réussie

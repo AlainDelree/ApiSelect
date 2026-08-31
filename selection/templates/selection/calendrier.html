@@ -19,8 +19,16 @@
         td.aujourdhui { background: #fff8e1; }
         .numero-jour { font-weight: bold; display: block; margin-bottom: 0.3em; }
         ul.etapes { list-style: none; margin: 0; padding: 0; font-size: 0.8em; }
-        ul.etapes li { margin-bottom: 0.2em; padding: 0.15em 0.3em; border-radius: 3px; background: #e3f2fd; }
-        ul.etapes li.realisee { background: #e8f5e9; text-decoration: line-through; color: #666; }
+        ul.etapes li { margin-bottom: 0.2em; padding: 0.15em 0.3em; border-radius: 3px; }
+        /* Le marquage "réalisée" (barré + liseré vert) se superpose à la
+           couleur du type d'étape sans la remplacer, pour que les deux
+           restent visibles en même temps (issue #15). */
+        ul.etapes li.realisee {
+            text-decoration: line-through;
+            border-left: 4px solid #2e7d32;
+            padding-left: 0.2em;
+            opacity: 0.7;
+        }
         .campagne-nom { font-weight: bold; }
         .message { padding: 1em; background: #fff3cd; border: 1px solid #ffeeba; border-radius: 4px; }
     </style>
@@ -54,7 +62,8 @@
                             {% if jour.etapes %}
                                 <ul class="etapes">
                                     {% for etape in jour.etapes %}
-                                        <li class="{% if etape.realisee %}realisee{% endif %}">
+                                        <li class="{% if etape.realisee %}realisee{% endif %}"
+                                            style="background: {{ etape.couleur.fond }}; color: {{ etape.couleur.texte }};">
                                             <span class="campagne-nom">{{ etape.campagne.nom }}</span> —
                                             {{ etape.get_type_etape_display }}
                                         </li>

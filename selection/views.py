@@ -8,6 +8,7 @@ from django.template.loader import render_to_string
 from xhtml2pdf import pisa
 
 from .calculs import calculer_index_colonie
+from .couleurs import couleur_etape
 from .models import (
     CampagneElevage,
     CritereSelection,
@@ -115,6 +116,7 @@ def calendrier_elevage(request):
         .select_related("campagne")
         .order_by("type_etape")
     ):
+        etape.couleur = couleur_etape(etape.type_etape)
         etapes_par_jour[etape.date_prevue].append(etape)
 
     semaines = [
@@ -161,6 +163,8 @@ def liste_taches(request):
         .select_related("campagne")
         .order_by("date_prevue")
     )
+    for etape in etapes:
+        etape.couleur = couleur_etape(etape.type_etape)
     return render(request, "selection/taches.html", {
         "etapes": etapes,
         "aujourdhui": date.today(),

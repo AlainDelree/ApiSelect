@@ -11,6 +11,7 @@
         th, td { border: 1px solid #ccc; padding: 0.4em 0.6em; text-align: left; }
         th { background: #f2f2f2; }
         tr.passee { background: #fdecea; }
+        .badge-etape { padding: 0.15em 0.5em; border-radius: 3px; }
         .message { padding: 1em; background: #fff3cd; border: 1px solid #ffeeba; border-radius: 4px; }
     </style>
 </head>
@@ -38,7 +39,11 @@
                     <tr class="{% if etape.date_prevue < aujourdhui %}passee{% endif %}">
                         <td>{{ etape.date_prevue }}</td>
                         <td>{{ etape.campagne.nom }}</td>
-                        <td>{{ etape.get_type_etape_display }}</td>
+                        <td>
+                            <span class="badge-etape" style="background: {{ etape.couleur.fond }}; color: {{ etape.couleur.texte }};">
+                                {{ etape.get_type_etape_display }}
+                            </span>
+                        </td>
                         <td><a href="{% url 'admin:selection_etapecalendrier_change' etape.id %}">Marquer réalisée &rarr;</a></td>
                     </tr>
                 {% endfor %}
