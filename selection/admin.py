@@ -187,9 +187,26 @@ class PoidsCritereInline(admin.TabularInline):
 
 @admin.register(LotCriteres)
 class LotCriteresAdmin(admin.ModelAdmin):
+    """Sur la page d'ajout, le formset inline (PoidsCritereInline)
+    pré-rempli avec les 9 critères fait déjà tout le travail de
+    création des PoidsCritere avec les valeurs saisies (issue #21).
+    Le signal creer_poids_criteres_lot (selection/signals.py) se
+    déclenche pourtant aussi, dès save_model(), avant que save_related()
+    n'ait traité le formset : les deux mécanismes entrent en conflit sur
+    la contrainte unique_poids_par_lot dès que les poids saisis diffèrent
+    de 0 (issue #22). On désactive donc le signal, uniquement pour ce
+    passage précis par le formulaire d'ajout, via un attribut temporaire
+    sur l'instance ; le signal reste le filet de sécurité pour toute
+    autre voie de création (shell, script, API future)."""
+
     list_display = ["nom"]
     search_fields = ["nom"]
     inlines = [PoidsCritereInline]
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj._creation_via_admin_formulaire = True
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(PoidsCritere)

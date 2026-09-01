@@ -18,6 +18,14 @@ un PoidsCritere à poids=0 est créé pour chacun des CritereSelection
 existants, pour éviter de les ajouter un par un via l'inline admin.
 Les critères ajoutés après coup au système ne sont volontairement pas
 rétro-ajoutés aux lots existants (hors périmètre, cf. issue #20).
+
+Ce filet de sécurité est sauté quand la création passe par la page
+d'ajout de l'admin (LotCriteresAdmin.save_model, selection/admin.py) :
+le formset inline pré-rempli (issue #21) crée déjà les 9 PoidsCritere
+avec les vraies valeurs saisies, et laisser le signal agir en plus
+provoque un conflit sur la contrainte unique_poids_par_lot dès que ces
+valeurs diffèrent de 0 (issue #22). Il reste actif pour toute autre
+création (shell, script, API future).
 """
 
 from django.db.models.signals import post_save
@@ -58,6 +66,8 @@ def recalculer_etapes_calendrier(sender, instance, **kwargs):
 @receiver(post_save, sender=LotCriteres)
 def creer_poids_criteres_lot(sender, instance, created, **kwargs):
     if not created:
+        return
+    if getattr(instance, "_creation_via_admin_formulaire", False):
         return
 
     for critere in CritereSelection.objects.all():

@@ -340,8 +340,18 @@ class AjoutLotCriteresAdminAffichePoidsPreremplisTests(TestCase):
         )
 
     def test_enregistrement_depuis_la_page_dajout_ne_cree_pas_de_doublons(self):
+        """Poids non nuls et variés (pas tous à 0) : avec des poids à 0
+        partout (valeur du pré-remplissage), has_changed() sur le
+        formset renvoie False pour chaque ligne extra/empty_permitted et
+        Django les traite comme des lignes vides non sauvegardées — le
+        formset ne fait alors *rien*, ce qui masquait complètement le
+        conflit avec le signal post_save (issue #22). Des poids
+        distincts de la valeur initiale sont nécessaires pour que
+        save_related() tente réellement l'insertion et fasse
+        apparaître le bug."""
         criteres = list(CritereSelection.objects.all())
         nb_criteres = len(criteres)
+        poids_saisis = [10, 7, 9, 6, 8, 5, 10, 4, 7][:nb_criteres]
 
         data = {
             "nom": "Lot créé depuis la page d'ajout",
@@ -353,7 +363,7 @@ class AjoutLotCriteresAdminAffichePoidsPreremplisTests(TestCase):
         }
         for i, critere in enumerate(criteres):
             data[f"poids_criteres-{i}-critere"] = str(critere.id)
-            data[f"poids_criteres-{i}-poids"] = "0"
+            data[f"poids_criteres-{i}-poids"] = str(poids_saisis[i])
             data[f"poids_criteres-{i}-seuil_eliminatoire"] = ""
             data[f"poids_criteres-{i}-id"] = ""
 
@@ -368,6 +378,69 @@ class AjoutLotCriteresAdminAffichePoidsPreremplisTests(TestCase):
             set(lot.poids_criteres.values_list("critere_id", flat=True)),
             set(c.id for c in criteres),
         )
+        poids_attendus = {
+            critere.id: poids for critere, poids in zip(criteres, poids_saisis)
+        }
+        for poids_critere in lot.poids_criteres.all():
+            self.assertEqual(
+                poids_critere.poids, poids_attendus[poids_critere.critere_id],
+            )
+
+    def test_enregistrement_avec_poids_non_nuls_ne_leve_pas_dintegrityerror(self):
+        """Reproduction exacte du bug signalé par Alain (issue #22) :
+        POST complet sur la page d'ajout, les 9 lignes de formset
+        pré-remplies avec des poids réellement saisis (non nuls,
+        valeurs variées comme dans le POST réel qui a échoué). Avant le
+        correctif, save_model() déclenchait le signal post_save qui
+        créait les 9 PoidsCritere à poids=0, puis save_related()
+        tentait de les réinsérer avec les vraies valeurs -> IntegrityError
+        sur la contrainte unique_poids_par_lot."""
+        criteres = list(CritereSelection.objects.all())
+        nb_criteres = len(criteres)
+        poids_saisis = [10, 7, 9, 6, 8, 5, 3, 9, 6][:nb_criteres]
+
+        data = {
+            "nom": "Lot avec poids réellement saisis",
+            "notes": "",
+            "poids_criteres-TOTAL_FORMS": str(nb_criteres),
+            "poids_criteres-INITIAL_FORMS": "0",
+            "poids_criteres-MIN_NUM_FORMS": "0",
+            "poids_criteres-MAX_NUM_FORMS": "1000",
+            "_save": "Enregistrer",
+        }
+        for i, critere in enumerate(criteres):
+            data[f"poids_criteres-{i}-critere"] = str(critere.id)
+            data[f"poids_criteres-{i}-poids"] = str(poids_saisis[i])
+            data[f"poids_criteres-{i}-seuil_eliminatoire"] = ""
+            data[f"poids_criteres-{i}-id"] = ""
+
+        response = self.client.post(
+            reverse("admin:selection_lotcriteres_add"), data,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        lot = LotCriteres.objects.get(nom="Lot avec poids réellement saisis")
+        self.assertEqual(lot.poids_criteres.count(), nb_criteres)
+        poids_attendus = {
+            critere.id: poids for critere, poids in zip(criteres, poids_saisis)
+        }
+        for poids_critere in lot.poids_criteres.all():
+            self.assertEqual(
+                poids_critere.poids, poids_attendus[poids_critere.critere_id],
+            )
+            self.assertNotEqual(poids_critere.poids, 0)
+
+    def test_signal_reste_actif_hors_du_formulaire_dajout(self):
+        """Le signal post_save (filet de sécurité) doit continuer à
+        peupler les PoidsCritere à poids=0 pour toute création de
+        LotCriteres qui ne passe pas par ce formulaire d'admin
+        précis (shell, script, API future)."""
+        lot = LotCriteres.objects.create(nom="Lot créé hors admin")
+
+        self.assertEqual(
+            lot.poids_criteres.count(), CritereSelection.objects.count(),
+        )
+        self.assertTrue(all(p.poids == 0 for p in lot.poids_criteres.all()))
 
 
 class CalculerDatesEtapesTests(TestCase):
