@@ -310,6 +310,15 @@ class CampagneElevage(models.Model):
                    "encore (issue #14) — l'étape ELEVAGE_MALES n'est créée "
                    "que si ce champ est coché.",
     )
+    lot_criteres = models.ForeignKey(
+        "LotCriteres", on_delete=models.PROTECT, null=True, blank=True,
+        related_name="campagnes",
+        help_text="Lot de critères (poids + seuils) utilisé pour le calcul "
+                   "d'index de cette campagne (issue #19). Peut rester vide "
+                   "temporairement, le temps de choisir un lot ; PROTECT "
+                   "empêche de supprimer un lot encore référencé par une "
+                   "campagne.",
+    )
     notes = models.TextField(blank=True)
 
     class Meta:
@@ -443,14 +452,38 @@ class CritereSelection(models.Model):
         return self.nom
 
 
-class PoidsCritere(models.Model):
-    """Poids (0-10) d'un critère pour une campagne donnée, historisé."""
+class LotCriteres(models.Model):
+    """Lot nommé et réutilisable de poids/seuils (les 9 critères), découplé
+    des campagnes (issue #19) : une même stratégie de sélection sert
+    souvent à plusieurs campagnes d'une même saison. Pour changer de
+    stratégie en cours de saison, on crée un nouveau lot plutôt que de
+    modifier un lot existant (principe déjà appliqué ailleurs dans le
+    projet : ne jamais modifier une donnée historique, en créer une
+    nouvelle)."""
 
-    campagne = models.ForeignKey(
-        CampagneElevage, on_delete=models.CASCADE, related_name="poids_criteres",
+    nom = models.CharField(
+        max_length=100, unique=True,
+        help_text="Ex. « Lot 2027 - priorité douceur ».",
+    )
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = "Lot de critères"
+        verbose_name_plural = "Lots de critères"
+        ordering = ["nom"]
+
+    def __str__(self):
+        return self.nom
+
+
+class PoidsCritere(models.Model):
+    """Poids (0-10) d'un critère pour un lot de critères donné, historisé."""
+
+    lot = models.ForeignKey(
+        LotCriteres, on_delete=models.CASCADE, related_name="poids_criteres",
     )
     critere = models.ForeignKey(
-        CritereSelection, on_delete=models.CASCADE, related_name="poids_par_campagne",
+        CritereSelection, on_delete=models.CASCADE, related_name="poids_par_lot",
     )
     poids = models.PositiveSmallIntegerField(
         validators=[MinValueValidator(0), MaxValueValidator(10)],
@@ -466,13 +499,13 @@ class PoidsCritere(models.Model):
         verbose_name_plural = "Poids de critères"
         constraints = [
             models.UniqueConstraint(
-                fields=["campagne", "critere"], name="unique_poids_par_campagne",
+                fields=["lot", "critere"], name="unique_poids_par_lot",
             ),
         ]
-        ordering = ["campagne", "critere__ordre"]
+        ordering = ["lot", "critere__ordre"]
 
     def __str__(self):
-        return f"{self.critere} — {self.campagne} (poids {self.poids})"
+        return f"{self.critere} — {self.lot} (poids {self.poids})"
 
 
 class Mesure(models.Model):

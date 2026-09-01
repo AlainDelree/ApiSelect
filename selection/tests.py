@@ -22,6 +22,7 @@ from .models import (
     Colonie,
     CritereSelection,
     EtapeCalendrier,
+    LotCriteres,
     Mesure,
     ModeCreationColonie,
     PoidsCritere,
@@ -142,13 +143,16 @@ class ResultatsSelectionViewTests(TestCase):
         )
 
     def setUp(self):
-        self.campagne = CampagneElevage.objects.create(nom="Campagne 2026", annee=2026)
+        self.lot_criteres = LotCriteres.objects.create(nom="Lot 2026")
+        self.campagne = CampagneElevage.objects.create(
+            nom="Campagne 2026", annee=2026, lot_criteres=self.lot_criteres,
+        )
         self.critere_sante = CritereSelection.objects.get(code="SANTE")
         self.critere_proprete = CritereSelection.objects.get(code="PROPRETE")
 
     def test_tri_par_index_decroissant(self):
         PoidsCritere.objects.create(
-            campagne=self.campagne, critere=self.critere_proprete, poids=5,
+            lot=self.lot_criteres, critere=self.critere_proprete, poids=5,
         )
         colonie_haute = self._creer_colonie(1)
         Mesure.objects.create(
@@ -173,7 +177,7 @@ class ResultatsSelectionViewTests(TestCase):
 
     def test_colonie_exclue_affichee_avec_motif(self):
         PoidsCritere.objects.create(
-            campagne=self.campagne, critere=self.critere_sante, poids=8,
+            lot=self.lot_criteres, critere=self.critere_sante, poids=8,
             seuil_eliminatoire=Decimal("2"),
         )
         colonie = self._creer_colonie(3)
@@ -218,6 +222,61 @@ class ResultatsSelectionViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Aucune campagne")
         self.assertEqual(list(response.context["campagnes"]), [])
+
+
+class LotCriteresReutilisableEntreCampagnesTests(TestCase):
+    """Vérifie le découplage des poids (issue #19) : un même LotCriteres
+    peut être assigné à plusieurs campagnes simultanément, et l'index se
+    calcule correctement (via la jointure SQL par lot_criteres_id, cf.
+    0011_vue_mesures_completes_lot_criteres.py) pour chacune, à partir de
+    mesures propres à chaque campagne."""
+
+    def _creer_colonie(self, numero):
+        type_ruche = TypeRuche.objects.get(code="DADANT10")
+        ruche = Ruche.objects.create(type_ruche=type_ruche, numero=numero)
+        return Colonie.objects.create(
+            ruche=ruche, mode_creation="ACHAT", date_creation="2026-01-01",
+            active=True,
+        )
+
+    def setUp(self):
+        self.lot_criteres = LotCriteres.objects.create(nom="Lot partagé 2026")
+        self.critere_proprete = CritereSelection.objects.get(code="PROPRETE")
+        PoidsCritere.objects.create(
+            lot=self.lot_criteres, critere=self.critere_proprete, poids=5,
+        )
+        self.campagne_1 = CampagneElevage.objects.create(
+            nom="Vague 1", annee=2026, lot_criteres=self.lot_criteres,
+        )
+        self.campagne_2 = CampagneElevage.objects.create(
+            nom="Vague 2", annee=2026, lot_criteres=self.lot_criteres,
+        )
+
+    def test_meme_lot_assignable_a_plusieurs_campagnes(self):
+        self.assertEqual(
+            set(self.lot_criteres.campagnes.values_list("nom", flat=True)),
+            {"Vague 1", "Vague 2"},
+        )
+
+    def test_index_correct_pour_chaque_campagne_avec_le_meme_lot(self):
+        colonie_1 = self._creer_colonie(1)
+        Mesure.objects.create(
+            colonie=colonie_1, critere=self.critere_proprete,
+            campagne=self.campagne_1, date_mesure="2026-05-01",
+            valeur_brute="propre", score=4,
+        )
+        colonie_2 = self._creer_colonie(2)
+        Mesure.objects.create(
+            colonie=colonie_2, critere=self.critere_proprete,
+            campagne=self.campagne_2, date_mesure="2026-05-01",
+            valeur_brute="sale", score=2,
+        )
+
+        resultat_1 = calculer_index_colonie(colonie_1.id, self.campagne_1.id)
+        resultat_2 = calculer_index_colonie(colonie_2.id, self.campagne_2.id)
+
+        self.assertEqual(resultat_1.index, Decimal(4))
+        self.assertEqual(resultat_2.index, Decimal(2))
 
 
 class CalculerDatesEtapesTests(TestCase):

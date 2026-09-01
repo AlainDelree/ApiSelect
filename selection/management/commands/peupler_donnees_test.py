@@ -9,6 +9,7 @@ from selection.models import (
     CampagneElevage,
     Colonie,
     CritereSelection,
+    LotCriteres,
     Mesure,
     ModeCreationColonie,
     PoidsCritere,
@@ -76,18 +77,24 @@ class Command(BaseCommand):
                 active=True,
             )
 
+            lot_criteres = LotCriteres.objects.create(
+                nom=f"{PREFIXE_TEST}Lot fictif {annee}",
+                notes="Lot de critères fictif créé par peupler_donnees_test.",
+            )
+
             campagne = CampagneElevage.objects.create(
                 nom=f"{PREFIXE_TEST}Campagne fictive {annee}",
                 annee=annee,
                 date_reference=date(annee, 6, 1),
+                lot_criteres=lot_criteres,
                 notes="Campagne fictive créée par peupler_donnees_test.",
             )
 
             critere_sante = CritereSelection.objects.get(code="SANTE")
             for critere in CritereSelection.objects.exclude(code="SANTE"):
-                PoidsCritere.objects.create(campagne=campagne, critere=critere, poids=5)
+                PoidsCritere.objects.create(lot=lot_criteres, critere=critere, poids=5)
             PoidsCritere.objects.create(
-                campagne=campagne, critere=critere_sante, poids=8,
+                lot=lot_criteres, critere=critere_sante, poids=8,
                 seuil_eliminatoire=Decimal("2"),
             )
 

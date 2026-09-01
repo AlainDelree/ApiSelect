@@ -7,6 +7,7 @@ from .models import (
     CritereSelection,
     EtapeCalendrier,
     EvenementColonie,
+    LotCriteres,
     Mesure,
     PoidsCritere,
     Reine,
@@ -106,12 +107,13 @@ class EtapeCalendrierInline(admin.TabularInline):
 @admin.register(CampagneElevage)
 class CampagneElevageAdmin(admin.ModelAdmin):
     list_display = [
-        "nom", "annee", "date_reference", "date_debut", "date_fin",
-        "elevage_males_actif", "taux_reussite_affichage",
+        "nom", "annee", "lot_criteres", "date_reference", "date_debut",
+        "date_fin", "elevage_males_actif", "taux_reussite_affichage",
     ]
-    list_filter = ["annee", "elevage_males_actif"]
+    list_filter = ["annee", "elevage_males_actif", "lot_criteres"]
     search_fields = ["nom"]
     readonly_fields = ["taux_reussite_affichage"]
+    autocomplete_fields = ["lot_criteres"]
     inlines = [EtapeCalendrierInline]
 
     @admin.display(description="Taux de réussite CR")
@@ -144,10 +146,27 @@ class CritereSelectionAdmin(admin.ModelAdmin):
     search_fields = ["nom", "code"]
 
 
+class PoidsCritereInline(admin.TabularInline):
+    """Poids/seuils du lot, sur le modèle de EtapeCalendrierInline
+    (issue #19)."""
+
+    model = PoidsCritere
+    extra = 0
+    fields = ["critere", "poids", "seuil_eliminatoire"]
+    autocomplete_fields = ["critere"]
+
+
+@admin.register(LotCriteres)
+class LotCriteresAdmin(admin.ModelAdmin):
+    list_display = ["nom"]
+    search_fields = ["nom"]
+    inlines = [PoidsCritereInline]
+
+
 @admin.register(PoidsCritere)
 class PoidsCritereAdmin(admin.ModelAdmin):
-    list_display = ["campagne", "critere", "poids", "seuil_eliminatoire"]
-    list_filter = ["campagne", "critere"]
+    list_display = ["lot", "critere", "poids", "seuil_eliminatoire"]
+    list_filter = ["lot", "critere"]
     list_editable = ["poids", "seuil_eliminatoire"]
 
 

@@ -2,7 +2,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from selection.gestion_base_test import NOM_RUCHER_TEST, PREFIXE_TEST, verifier_base_de_test
-from selection.models import CampagneElevage, Colonie, Reine, Ruche, Rucher
+from selection.models import CampagneElevage, Colonie, LotCriteres, Reine, Ruche, Rucher
 
 
 class Command(BaseCommand):
@@ -28,6 +28,11 @@ class Command(BaseCommand):
             campagnes = CampagneElevage.objects.filter(nom__startswith=PREFIXE_TEST)
             nb_campagnes = campagnes.count()
             campagnes.delete()
+
+            # Supprimé après les campagnes (PROTECT empêche de supprimer un
+            # LotCriteres encore référencé par une campagne, cf. issue #19).
+            lots_criteres = LotCriteres.objects.filter(nom__startswith=PREFIXE_TEST)
+            lots_criteres.delete()
 
             reines = Reine.objects.filter(identifiant__startswith=PREFIXE_TEST)
             nb_reines = reines.count()
