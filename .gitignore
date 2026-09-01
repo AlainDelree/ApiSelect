@@ -4,3 +4,4 @@ __pycache__/
 *.log
 .env
 Cours_Apiculture/
+update_descriptions_criteres.sql
