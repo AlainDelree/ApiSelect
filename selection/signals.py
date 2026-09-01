@@ -12,13 +12,26 @@ n'est créée/recalculée que si `elevage_males_actif` est coché sur la
 campagne. Si le champ est décoché alors qu'une étape ELEVAGE_MALES
 existe déjà (ex. campagne modifiée après coup), elle est supprimée
 plutôt que laissée orpheline avec une date obsolète.
+
+Auto-peuplement d'un LotCriteres (issue #20) : à la création d'un lot,
+un PoidsCritere à poids=0 est créé pour chacun des CritereSelection
+existants, pour éviter de les ajouter un par un via l'inline admin.
+Les critères ajoutés après coup au système ne sont volontairement pas
+rétro-ajoutés aux lots existants (hors périmètre, cf. issue #20).
 """
 
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
 from .calculs import calculer_dates_etapes
-from .models import CampagneElevage, EtapeCalendrier, TypeEtapeCalendrier
+from .models import (
+    CampagneElevage,
+    CritereSelection,
+    EtapeCalendrier,
+    LotCriteres,
+    PoidsCritere,
+    TypeEtapeCalendrier,
+)
 
 
 @receiver(post_save, sender=CampagneElevage)
@@ -40,3 +53,14 @@ def recalculer_etapes_calendrier(sender, instance, **kwargs):
         if not cree and etape.date_prevue != date_prevue:
             etape.date_prevue = date_prevue
             etape.save(update_fields=["date_prevue"])
+
+
+@receiver(post_save, sender=LotCriteres)
+def creer_poids_criteres_lot(sender, instance, created, **kwargs):
+    if not created:
+        return
+
+    for critere in CritereSelection.objects.all():
+        PoidsCritere.objects.get_or_create(
+            lot=instance, critere=critere, defaults={"poids": 0},
+        )

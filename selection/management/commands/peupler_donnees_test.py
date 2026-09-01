@@ -90,13 +90,17 @@ class Command(BaseCommand):
                 notes="Campagne fictive créée par peupler_donnees_test.",
             )
 
+            # Le signal post_save de LotCriteres (issue #20) a déjà créé un
+            # PoidsCritere à poids=0 pour chacun des critères existants : on
+            # ajuste les valeurs plutôt que d'en créer de nouveaux.
             critere_sante = CritereSelection.objects.get(code="SANTE")
             for critere in CritereSelection.objects.exclude(code="SANTE"):
-                PoidsCritere.objects.create(lot=lot_criteres, critere=critere, poids=5)
-            PoidsCritere.objects.create(
-                lot=lot_criteres, critere=critere_sante, poids=8,
-                seuil_eliminatoire=Decimal("2"),
-            )
+                PoidsCritere.objects.filter(
+                    lot=lot_criteres, critere=critere,
+                ).update(poids=5)
+            PoidsCritere.objects.filter(
+                lot=lot_criteres, critere=critere_sante,
+            ).update(poids=8, seuil_eliminatoire=Decimal("2"))
 
             date_mesure = date(annee, 5, 15)
 

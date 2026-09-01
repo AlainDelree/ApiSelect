@@ -487,6 +487,9 @@ class PoidsCritere(models.Model):
     )
     poids = models.PositiveSmallIntegerField(
         validators=[MinValueValidator(0), MaxValueValidator(10)],
+        help_text="Poids relatif du critère dans le calcul de l'index, de 0 "
+                   "(aucune importance) à 10 (priorité maximale). Seul le "
+                   "ratio entre les poids compte, pas leur valeur absolue.",
     )
     seuil_eliminatoire = models.DecimalField(
         max_digits=6, decimal_places=2, null=True, blank=True,

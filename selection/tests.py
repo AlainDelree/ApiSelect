@@ -151,9 +151,9 @@ class ResultatsSelectionViewTests(TestCase):
         self.critere_proprete = CritereSelection.objects.get(code="PROPRETE")
 
     def test_tri_par_index_decroissant(self):
-        PoidsCritere.objects.create(
-            lot=self.lot_criteres, critere=self.critere_proprete, poids=5,
-        )
+        PoidsCritere.objects.filter(
+            lot=self.lot_criteres, critere=self.critere_proprete,
+        ).update(poids=5)
         colonie_haute = self._creer_colonie(1)
         Mesure.objects.create(
             colonie=colonie_haute, critere=self.critere_proprete,
@@ -176,10 +176,9 @@ class ResultatsSelectionViewTests(TestCase):
         self.assertEqual(indices, [Decimal(4), Decimal(1)])
 
     def test_colonie_exclue_affichee_avec_motif(self):
-        PoidsCritere.objects.create(
-            lot=self.lot_criteres, critere=self.critere_sante, poids=8,
-            seuil_eliminatoire=Decimal("2"),
-        )
+        PoidsCritere.objects.filter(
+            lot=self.lot_criteres, critere=self.critere_sante,
+        ).update(poids=8, seuil_eliminatoire=Decimal("2"))
         colonie = self._creer_colonie(3)
         Mesure.objects.create(
             colonie=colonie, critere=self.critere_sante,
@@ -242,9 +241,9 @@ class LotCriteresReutilisableEntreCampagnesTests(TestCase):
     def setUp(self):
         self.lot_criteres = LotCriteres.objects.create(nom="Lot partagé 2026")
         self.critere_proprete = CritereSelection.objects.get(code="PROPRETE")
-        PoidsCritere.objects.create(
-            lot=self.lot_criteres, critere=self.critere_proprete, poids=5,
-        )
+        PoidsCritere.objects.filter(
+            lot=self.lot_criteres, critere=self.critere_proprete,
+        ).update(poids=5)
         self.campagne_1 = CampagneElevage.objects.create(
             nom="Vague 1", annee=2026, lot_criteres=self.lot_criteres,
         )
@@ -277,6 +276,38 @@ class LotCriteresReutilisableEntreCampagnesTests(TestCase):
 
         self.assertEqual(resultat_1.index, Decimal(4))
         self.assertEqual(resultat_2.index, Decimal(2))
+
+
+class AutoPeuplementLotCriteresTests(TestCase):
+    """Vérifie le signal post_save sur LotCriteres (issue #20) : à la
+    création d'un lot, un PoidsCritere à poids=0 est créé pour chacun des
+    CritereSelection existants, sans duplication à un ré-enregistrement."""
+
+    def test_creation_lot_cree_un_poids_zero_par_critere(self):
+        lot = LotCriteres.objects.create(nom="Lot auto-peuplé")
+
+        nb_criteres = CritereSelection.objects.count()
+        self.assertEqual(nb_criteres, 9)
+        self.assertEqual(lot.poids_criteres.count(), nb_criteres)
+        self.assertTrue(
+            all(pc.poids == 0 for pc in lot.poids_criteres.all())
+        )
+        self.assertTrue(
+            all(pc.seuil_eliminatoire is None for pc in lot.poids_criteres.all())
+        )
+        self.assertEqual(
+            set(lot.poids_criteres.values_list("critere_id", flat=True)),
+            set(CritereSelection.objects.values_list("id", flat=True)),
+        )
+
+    def test_reenregistrement_du_lot_ne_duplique_rien(self):
+        lot = LotCriteres.objects.create(nom="Lot ré-enregistré")
+        nb_criteres = CritereSelection.objects.count()
+
+        lot.notes = "RAS"
+        lot.save()
+
+        self.assertEqual(lot.poids_criteres.count(), nb_criteres)
 
 
 class CalculerDatesEtapesTests(TestCase):
