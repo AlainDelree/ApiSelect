@@ -1,3 +1,4 @@
+from django import forms
 from django.contrib import admin
 
 from .models import (
@@ -146,6 +147,46 @@ class CritereSelectionAdmin(admin.ModelAdmin):
     search_fields = ["nom", "code"]
 
 
+class SelectCritereAvecTitre(forms.Select):
+    """Ajoute un attribut HTML `title` (description complète du critère,
+    issue #23) sur chaque <option>, consultable au survol pour qui veut
+    plus de détail que le repère court du label."""
+
+    def __init__(self, *args, descriptions=None, **kwargs):
+        self.descriptions = descriptions or {}
+        super().__init__(*args, **kwargs)
+
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        option = super().create_option(name, value, label, selected, index, subindex, attrs)
+        description = self.descriptions.get(str(value))
+        if description:
+            option["attrs"]["title"] = description
+        return option
+
+
+class ChampCritereAvecRepere(forms.ModelChoiceField):
+    """ModelChoiceField pour `critere` avec un court repère de
+    désambiguïsation entre parenthèses à côté du nom (issue #23) :
+    certains noms de CritereSelection se ressemblent de trop près dans
+    la liste déroulante ("Miel" / "Récolte", "Propreté" / "Nettoyage
+    des rayons"). Local à PoidsCritereInline : ne modifie pas
+    CritereSelection.nom, qui reste le libellé officiel affiché ailleurs
+    (CritereSelectionAdmin, tableau de résultats, fiches PDF, calendrier)."""
+
+    REPERES_PAR_CODE = {
+        "PROPRETE": "état du plateau",
+        "NETTOYAGE": "test, temps de nettoyage",
+        "RECOLTE": "comparée à la moyenne du rucher",
+        "MIEL": "provision stockée",
+    }
+
+    def label_from_instance(self, obj):
+        repere = self.REPERES_PAR_CODE.get(obj.code)
+        if repere:
+            return f"{obj.nom} ({repere})"
+        return obj.nom
+
+
 class PoidsCritereInline(admin.TabularInline):
     """Poids/seuils du lot, sur le modèle de EtapeCalendrierInline
     (issue #19).
@@ -161,7 +202,19 @@ class PoidsCritereInline(admin.TabularInline):
     model = PoidsCritere
     extra = 0
     fields = ["critere", "poids", "seuil_eliminatoire"]
-    autocomplete_fields = ["critere"]
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "critere":
+            descriptions = {
+                str(pk): description
+                for pk, description in CritereSelection.objects.values_list(
+                    "pk", "description"
+                )
+                if description
+            }
+            kwargs["form_class"] = ChampCritereAvecRepere
+            kwargs["widget"] = SelectCritereAvecTitre(descriptions=descriptions)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def get_extra(self, request, obj=None, **kwargs):
         if obj is None:
