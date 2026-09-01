@@ -310,6 +310,66 @@ class AutoPeuplementLotCriteresTests(TestCase):
         self.assertEqual(lot.poids_criteres.count(), nb_criteres)
 
 
+class AjoutLotCriteresAdminAffichePoidsPreremplisTests(TestCase):
+    """Vérifie que la page d'ajout d'un LotCriteres affiche directement
+    les 9 lignes d'inline pré-remplies (critère + poids=0), sans passer
+    par le détour "enregistrer une première fois" qu'imposait le seul
+    signal post_save (issue #20 -> issue #21)."""
+
+    def setUp(self):
+        self.superuser = get_user_model().objects.create_superuser(
+            username="admin", email="admin@example.com", password="motdepasse",
+        )
+        self.client.force_login(self.superuser)
+
+    def test_page_ajout_affiche_9_lignes_prereplies(self):
+        response = self.client.get(reverse("admin:selection_lotcriteres_add"))
+
+        self.assertEqual(response.status_code, 200)
+        formset = response.context["inline_admin_formsets"][0].formset
+        self.assertEqual(formset.extra_forms.__len__(), CritereSelection.objects.count())
+        criteres_prereplis = {
+            form.initial["critere"] for form in formset.extra_forms
+        }
+        self.assertEqual(
+            criteres_prereplis,
+            set(CritereSelection.objects.values_list("id", flat=True)),
+        )
+        self.assertTrue(
+            all(form.initial["poids"] == 0 for form in formset.extra_forms)
+        )
+
+    def test_enregistrement_depuis_la_page_dajout_ne_cree_pas_de_doublons(self):
+        criteres = list(CritereSelection.objects.all())
+        nb_criteres = len(criteres)
+
+        data = {
+            "nom": "Lot créé depuis la page d'ajout",
+            "notes": "",
+            "poids_criteres-TOTAL_FORMS": str(nb_criteres),
+            "poids_criteres-INITIAL_FORMS": "0",
+            "poids_criteres-MIN_NUM_FORMS": "0",
+            "poids_criteres-MAX_NUM_FORMS": "1000",
+        }
+        for i, critere in enumerate(criteres):
+            data[f"poids_criteres-{i}-critere"] = str(critere.id)
+            data[f"poids_criteres-{i}-poids"] = "0"
+            data[f"poids_criteres-{i}-seuil_eliminatoire"] = ""
+            data[f"poids_criteres-{i}-id"] = ""
+
+        response = self.client.post(
+            reverse("admin:selection_lotcriteres_add"), data, follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        lot = LotCriteres.objects.get(nom="Lot créé depuis la page d'ajout")
+        self.assertEqual(lot.poids_criteres.count(), nb_criteres)
+        self.assertEqual(
+            set(lot.poids_criteres.values_list("critere_id", flat=True)),
+            set(c.id for c in criteres),
+        )
+
+
 class CalculerDatesEtapesTests(TestCase):
     """Vérifie la cascade de dates contre la méthode réelle d'Alain
     (issue #14) : pas de starter/finisseur/couveuse séparés (fusionnés en

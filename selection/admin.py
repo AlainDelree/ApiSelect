@@ -148,12 +148,41 @@ class CritereSelectionAdmin(admin.ModelAdmin):
 
 class PoidsCritereInline(admin.TabularInline):
     """Poids/seuils du lot, sur le modèle de EtapeCalendrierInline
-    (issue #19)."""
+    (issue #19).
+
+    Sur la page d'ajout (obj is None), le formset est pré-rempli avec
+    une ligne par CritereSelection existant (poids=0), pour éviter
+    l'aller-retour "enregistrer une première fois" nécessaire au
+    signal post_save (issue #21). Sur la page de modification, ce
+    pré-remplissage est désactivé (extra=0) : le signal a déjà créé
+    les PoidsCritere réels, get_or_create empêchant tout doublon entre
+    les deux mécanismes."""
 
     model = PoidsCritere
     extra = 0
     fields = ["critere", "poids", "seuil_eliminatoire"]
     autocomplete_fields = ["critere"]
+
+    def get_extra(self, request, obj=None, **kwargs):
+        if obj is None:
+            return CritereSelection.objects.count()
+        return 0
+
+    def get_formset(self, request, obj=None, **kwargs):
+        formset = super().get_formset(request, obj, **kwargs)
+        if obj is None:
+            initial = [
+                {"critere": critere.pk, "poids": 0}
+                for critere in CritereSelection.objects.all()
+            ]
+
+            class FormSetAvecCriteresPreremplis(formset):
+                def __init__(self, *args, **kwargs):
+                    kwargs.setdefault("initial", initial)
+                    super().__init__(*args, **kwargs)
+
+            return FormSetAvecCriteresPreremplis
+        return formset
 
 
 @admin.register(LotCriteres)
