@@ -515,6 +515,45 @@ class PoidsCritereInlineRepereDesambiguisationTests(TestCase):
         self.assertIn(miel.description, html)
 
 
+class PoidsCritereBornesHtmlMinMaxTests(TestCase):
+    """Vérifie que le champ `poids` porte les attributs HTML min/max/step
+    (issue #24), pour un retour immédiat côté navigateur avant tout
+    enregistrement — en complément, et non en remplacement, de la
+    validation serveur (MinValueValidator/MaxValueValidator sur
+    PoidsCritere.poids, selection/models.py)."""
+
+    def setUp(self):
+        self.superuser = get_user_model().objects.create_superuser(
+            username="admin", email="admin@example.com", password="motdepasse",
+        )
+        self.client.force_login(self.superuser)
+        self.lot_criteres = LotCriteres.objects.create(nom="Lot bornes poids")
+
+    def test_bornes_html_sur_le_formulaire_inline_sous_lotcriteres(self):
+        response = self.client.get(reverse("admin:selection_lotcriteres_add"))
+        formset = response.context["inline_admin_formsets"][0].formset
+        html = str(formset.forms[0]["poids"])
+
+        self.assertIn('min="0"', html)
+        self.assertIn('max="10"', html)
+        self.assertIn('step="1"', html)
+
+    def test_bornes_html_sur_le_formulaire_direct_poidscritereadmin(self):
+        critere = CritereSelection.objects.first()
+        poids_critere = PoidsCritere.objects.get_or_create(
+            lot=self.lot_criteres, critere=critere, defaults={"poids": 5},
+        )[0]
+
+        response = self.client.get(
+            reverse("admin:selection_poidscritere_change", args=[poids_critere.pk])
+        )
+        html = str(response.context["adminform"].form["poids"])
+
+        self.assertIn('min="0"', html)
+        self.assertIn('max="10"', html)
+        self.assertIn('step="1"', html)
+
+
 class CalculerDatesEtapesTests(TestCase):
     """Vérifie la cascade de dates contre la méthode réelle d'Alain
     (issue #14) : pas de starter/finisseur/couveuse séparés (fusionnés en

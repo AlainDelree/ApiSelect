@@ -187,6 +187,20 @@ class ChampCritereAvecRepere(forms.ModelChoiceField):
         return obj.nom
 
 
+class PoidsCritereForm(forms.ModelForm):
+    """Bornes HTML min/max sur le champ poids (issue #24) : la validation
+    serveur (MinValueValidator/MaxValueValidator, selection/models.py) reste
+    le garde-fou réel, cet ajout n'est qu'un signal immédiat côté navigateur
+    avant tout enregistrement."""
+
+    class Meta:
+        model = PoidsCritere
+        fields = "__all__"
+        widgets = {
+            "poids": forms.NumberInput(attrs={"min": 0, "max": 10, "step": 1}),
+        }
+
+
 class PoidsCritereInline(admin.TabularInline):
     """Poids/seuils du lot, sur le modèle de EtapeCalendrierInline
     (issue #19).
@@ -200,6 +214,7 @@ class PoidsCritereInline(admin.TabularInline):
     les deux mécanismes."""
 
     model = PoidsCritere
+    form = PoidsCritereForm
     extra = 0
     fields = ["critere", "poids", "seuil_eliminatoire"]
 
@@ -264,6 +279,7 @@ class LotCriteresAdmin(admin.ModelAdmin):
 
 @admin.register(PoidsCritere)
 class PoidsCritereAdmin(admin.ModelAdmin):
+    form = PoidsCritereForm
     list_display = ["lot", "critere", "poids", "seuil_eliminatoire"]
     list_filter = ["lot", "critere"]
     list_editable = ["poids", "seuil_eliminatoire"]
