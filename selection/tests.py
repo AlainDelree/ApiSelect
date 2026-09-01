@@ -443,6 +443,78 @@ class AjoutLotCriteresAdminAffichePoidsPreremplisTests(TestCase):
         self.assertTrue(all(p.poids == 0 for p in lot.poids_criteres.all()))
 
 
+class PoidsCritereInlineRepereDesambiguisationTests(TestCase):
+    """Vérifie que le formulaire d'ajout d'un LotCriteres affiche, dans
+    la liste déroulante du champ `critere`, un repère de désambiguïsation
+    entre parenthèses pour les paires de noms proches (issue #23) :
+    "Miel" / "Récolte" et "Propreté" / "Nettoyage des rayons"."""
+
+    def setUp(self):
+        self.superuser = get_user_model().objects.create_superuser(
+            username="admin", email="admin@example.com", password="motdepasse",
+        )
+        self.client.force_login(self.superuser)
+
+    def _labels_champ_critere(self, response):
+        formset = response.context["inline_admin_formsets"][0].formset
+        champ_critere = formset.forms[0].fields["critere"]
+        return {
+            critere: champ_critere.label_from_instance(critere)
+            for critere in CritereSelection.objects.all()
+        }
+
+    def test_libelles_distinguent_miel_et_recolte(self):
+        response = self.client.get(reverse("admin:selection_lotcriteres_add"))
+        labels = {
+            critere.code: label
+            for critere, label in self._labels_champ_critere(response).items()
+        }
+
+        self.assertNotEqual(labels["MIEL"], labels["RECOLTE"])
+        self.assertIn("Miel", labels["MIEL"])
+        self.assertIn("Récolte", labels["RECOLTE"])
+        self.assertGreater(len(labels["MIEL"]), len("Miel"))
+        self.assertGreater(len(labels["RECOLTE"]), len("Récolte"))
+
+    def test_libelles_distinguent_proprete_et_nettoyage(self):
+        response = self.client.get(reverse("admin:selection_lotcriteres_add"))
+        labels = {
+            critere.code: label
+            for critere, label in self._labels_champ_critere(response).items()
+        }
+
+        self.assertNotEqual(labels["PROPRETE"], labels["NETTOYAGE"])
+        self.assertIn("Propreté", labels["PROPRETE"])
+        self.assertIn("Nettoyage des rayons", labels["NETTOYAGE"])
+        self.assertGreater(len(labels["PROPRETE"]), len("Propreté"))
+        self.assertGreater(len(labels["NETTOYAGE"]), len("Nettoyage des rayons"))
+
+    def test_nom_stocke_en_base_reste_inchange(self):
+        self.client.get(reverse("admin:selection_lotcriteres_add"))
+
+        self.assertEqual(CritereSelection.objects.get(code="MIEL").nom, "Miel")
+        self.assertEqual(
+            CritereSelection.objects.get(code="RECOLTE").nom, "Récolte",
+        )
+        self.assertEqual(
+            CritereSelection.objects.get(code="PROPRETE").nom, "Propreté",
+        )
+        self.assertEqual(
+            CritereSelection.objects.get(code="NETTOYAGE").nom,
+            "Nettoyage des rayons",
+        )
+
+    def test_titre_html_de_loption_contient_la_description_complete(self):
+        response = self.client.get(reverse("admin:selection_lotcriteres_add"))
+        formset = response.context["inline_admin_formsets"][0].formset
+        champ_critere = formset.forms[0].fields["critere"]
+        miel = CritereSelection.objects.get(code="MIEL")
+
+        html = champ_critere.widget.render("critere", str(miel.pk))
+
+        self.assertIn(miel.description, html)
+
+
 class CalculerDatesEtapesTests(TestCase):
     """Vérifie la cascade de dates contre la méthode réelle d'Alain
     (issue #14) : pas de starter/finisseur/couveuse séparés (fusionnés en
