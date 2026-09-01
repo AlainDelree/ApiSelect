@@ -1,8 +1,12 @@
-from django import forms
-from django.contrib import admin
+from datetime import date
 
+from django import forms
+from django.contrib import admin, messages
+
+from .calculs import suggerer_identifiant_fille
 from .models import (
     CampagneElevage,
+    CelluleRoyale,
     Colonie,
     ConfigurationColonie,
     CritereSelection,
@@ -10,11 +14,14 @@ from .models import (
     EvenementColonie,
     LotCriteres,
     Mesure,
+    ModeAcquisitionReine,
     PoidsCritere,
     Reine,
     Ruche,
     Rucher,
     StationFecondation,
+    StatutCelluleRoyale,
+    StatutReine,
     TypeRuche,
 )
 
@@ -50,10 +57,13 @@ class StationFecondationAdmin(admin.ModelAdmin):
 @admin.register(Reine)
 class ReineAdmin(admin.ModelAdmin):
     list_display = [
-        "identifiant", "mere", "couleur_marquage", "date_naissance",
+        "identifiant", "mere", "statut", "mode_acquisition",
+        "couleur_marquage", "date_naissance", "date_fecondation",
         "station_fecondation", "date_deces",
     ]
-    list_filter = ["couleur_marquage", "station_fecondation"]
+    list_filter = [
+        "statut", "mode_acquisition", "couleur_marquage", "station_fecondation",
+    ]
     search_fields = ["identifiant", "lignee_male_probable"]
     autocomplete_fields = ["mere", "station_fecondation"]
 
@@ -85,19 +95,21 @@ class ColonieAdmin(admin.ModelAdmin):
 
 class EtapeCalendrierInline(admin.TabularInline):
     """Étapes calculées automatiquement (cf. selection/signals.py) : la
-    date prévue et le type d'étape sont en lecture seule ici. `ruche` et
-    `nombre_cr` (issue #16) se saisissent à la main, surtout sur les
-    étapes Ruche orpheline (CR obtenues) et Garnir les Apidea (CR
-    introduites) — cf. CampagneElevage.taux_reussite."""
+    date prévue et le type d'étape sont en lecture seule ici.
+    `ruche_origine`/`ruche_destination` (issue #25, remplace le champ
+    unique `ruche` de l'issue #16) se saisissent à la main, leur usage
+    dépendant de l'étape (cf. docstring EtapeCalendrier). Le suivi
+    individuel des cellules royales (nombre, statut, Apidea) vit
+    désormais dans CelluleRoyaleAdmin, plus dans cet inline."""
 
     model = EtapeCalendrier
     extra = 0
     fields = [
-        "type_etape", "date_prevue", "realisee", "date_reelle", "ruche",
-        "nombre_cr", "notes",
+        "type_etape", "date_prevue", "realisee", "date_reelle",
+        "ruche_origine", "ruche_destination", "notes",
     ]
     readonly_fields = ["type_etape", "date_prevue"]
-    autocomplete_fields = ["ruche"]
+    autocomplete_fields = ["ruche_origine", "ruche_destination"]
     can_delete = False
     ordering = ["date_prevue"]
 
@@ -119,8 +131,8 @@ class CampagneElevageAdmin(admin.ModelAdmin):
 
     @admin.display(description="Taux de réussite CR")
     def taux_reussite_affichage(self, obj):
-        """CR introduites dans les Apidea ÷ CR obtenues sur la ruche
-        orpheline (issue #16) — cf. CampagneElevage.taux_reussite."""
+        """CelluleRoyale devenues reine ÷ total des CelluleRoyale de la
+        campagne (issue #25) — cf. CampagneElevage.taux_reussite."""
         taux = obj.taux_reussite
         if taux is None:
             return "non calculable"
@@ -131,12 +143,65 @@ class CampagneElevageAdmin(admin.ModelAdmin):
 class EtapeCalendrierAdmin(admin.ModelAdmin):
     list_display = [
         "campagne", "type_etape", "date_prevue", "realisee", "date_reelle",
-        "ruche", "nombre_cr",
+        "ruche_origine", "ruche_destination",
     ]
     list_filter = ["type_etape", "realisee", "campagne"]
-    list_editable = ["realisee", "date_reelle", "nombre_cr"]
+    list_editable = ["realisee", "date_reelle"]
     search_fields = ["campagne__nom"]
-    autocomplete_fields = ["campagne", "ruche"]
+    autocomplete_fields = ["campagne", "ruche_origine", "ruche_destination"]
+
+
+@admin.register(CelluleRoyale)
+class CelluleRoyaleAdmin(admin.ModelAdmin):
+    """Suivi individuel de chaque cellule royale (issue #25). L'action
+    `confirmer_eclosion` couvre le seul cas qui a besoin d'un traitement
+    spécial (créer la Reine liée) ; les statuts MORTE_AVANT_ECLOSION et
+    PERDUE se marquent simplement en modifiant le champ `statut`
+    directement, sans action dédiée."""
+
+    list_display = [
+        "campagne", "mere", "statut", "ruche_orpheline", "apidea", "reine",
+    ]
+    list_filter = ["campagne", "statut", "ruche_orpheline", "apidea"]
+    search_fields = ["mere__identifiant", "reine__identifiant"]
+    autocomplete_fields = ["campagne", "mere", "ruche_orpheline", "apidea", "reine"]
+    actions = ["confirmer_eclosion"]
+
+    @admin.action(description="Confirmer éclosion → créer la Reine")
+    def confirmer_eclosion(self, request, queryset):
+        a_traiter = queryset.filter(statut=StatutCelluleRoyale.EN_DEVELOPPEMENT)
+        nb_ignorees = queryset.exclude(statut=StatutCelluleRoyale.EN_DEVELOPPEMENT).count()
+
+        identifiants_crees = []
+        for cellule in a_traiter:
+            identifiant = suggerer_identifiant_fille(cellule.mere, date.today().year)
+            reine = Reine.objects.create(
+                identifiant=identifiant,
+                mere=cellule.mere,
+                statut=StatutReine.VIERGE,
+                mode_acquisition=ModeAcquisitionReine.ELEVEE,
+            )
+            cellule.reine = reine
+            cellule.statut = StatutCelluleRoyale.DEVENUE_REINE
+            cellule.save(update_fields=["reine", "statut"])
+            identifiants_crees.append(identifiant)
+
+        if identifiants_crees:
+            self.message_user(
+                request,
+                f"{len(identifiants_crees)} reine(s) créée(s) : "
+                f"{', '.join(identifiants_crees)}. Finalisez ensuite "
+                "manuellement chaque fiche (date de naissance exacte, "
+                "marquage couleur...).",
+                level=messages.SUCCESS,
+            )
+        if nb_ignorees:
+            self.message_user(
+                request,
+                f"{nb_ignorees} cellule(s) ignorée(s) : statut différent "
+                "de « En développement ».",
+                level=messages.WARNING,
+            )
 
 
 @admin.register(CritereSelection)

@@ -24,7 +24,6 @@ COULEURS_ETAPES = {
     TypeEtapeCalendrier.ELEVAGE_MALES: {"fond": "#90caf9", "texte": "#000000"},
     TypeEtapeCalendrier.ORPHELINAGE: {"fond": "#80cbc4", "texte": "#000000"},
     TypeEtapeCalendrier.PICKING: {"fond": "#fb8c00", "texte": "#000000"},
-    TypeEtapeCalendrier.RUCHE_ORPHELINE: {"fond": "#ce93d8", "texte": "#000000"},
     TypeEtapeCalendrier.GARNIR_APIDEA: {"fond": "#c62828", "texte": "#ffffff"},
     TypeEtapeCalendrier.CONTROLE_PONTE_GRILLE: {"fond": "#a5d6a7", "texte": "#000000"},
 }

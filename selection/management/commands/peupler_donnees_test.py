@@ -7,15 +7,19 @@ from django.db import transaction
 from selection.gestion_base_test import NOM_RUCHER_TEST, PREFIXE_TEST, verifier_base_de_test
 from selection.models import (
     CampagneElevage,
+    CelluleRoyale,
     Colonie,
     CritereSelection,
     LotCriteres,
     Mesure,
+    ModeAcquisitionReine,
     ModeCreationColonie,
     PoidsCritere,
     Reine,
     Ruche,
     Rucher,
+    StatutCelluleRoyale,
+    StatutReine,
     TypeMesure,
     TypeRuche,
 )
@@ -130,10 +134,45 @@ class Command(BaseCommand):
 
             # colonie_sans_mesure : volontairement aucune mesure créée.
 
+            # Cellules royales fictives (issue #25) : couvrent les trois cas
+            # utiles pour tester le taux de réussite et l'action admin
+            # "Confirmer éclosion" sans toucher à la vraie base.
+            type_apidea = TypeRuche.objects.get(code="APIDEA")
+            ruche_orpheline = Ruche.objects.create(
+                type_ruche=type_ruche, numero=904, rucher=rucher,
+            )
+            apidea_reussie = Ruche.objects.create(
+                type_ruche=type_apidea, numero=1, rucher=rucher,
+            )
+
+            reine_fille = Reine.objects.create(
+                identifiant=f"{PREFIXE_TEST}R{str(annee)[-2:]}-1",
+                mere=reine_normale,
+                statut=StatutReine.VIERGE,
+                mode_acquisition=ModeAcquisitionReine.ELEVEE,
+            )
+            CelluleRoyale.objects.create(
+                campagne=campagne, mere=reine_normale, ruche_orpheline=ruche_orpheline,
+                apidea=apidea_reussie, statut=StatutCelluleRoyale.DEVENUE_REINE,
+                reine=reine_fille,
+                notes="CR fictive créée par peupler_donnees_test.",
+            )
+            CelluleRoyale.objects.create(
+                campagne=campagne, mere=reine_normale, ruche_orpheline=ruche_orpheline,
+                statut=StatutCelluleRoyale.MORTE_AVANT_ECLOSION,
+                notes="CR fictive créée par peupler_donnees_test.",
+            )
+            CelluleRoyale.objects.create(
+                campagne=campagne, mere=reine_normale, ruche_orpheline=ruche_orpheline,
+                statut=StatutCelluleRoyale.EN_DEVELOPPEMENT,
+                notes="CR fictive créée par peupler_donnees_test.",
+            )
+
         self.stdout.write(self.style.SUCCESS(
             f"Jeu de données fictif créé : rucher « {NOM_RUCHER_TEST} », "
             f"3 colonies ({reine_normale.identifiant} avec mesures, "
             f"{reine_exclue.identifiant} exclue par seuil, "
             f"{reine_sans_mesure.identifiant} sans mesure), "
-            f"campagne « {campagne.nom} »."
+            f"campagne « {campagne.nom} », 3 cellules royales fictives "
+            f"(devenue reine, morte avant éclosion, en développement)."
         ))

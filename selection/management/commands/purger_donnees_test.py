@@ -21,19 +21,26 @@ class Command(BaseCommand):
             nb_colonies = colonies.count()
             colonies.delete()
 
-            ruches = Ruche.objects.filter(rucher__nom=NOM_RUCHER_TEST)
-            nb_ruches = ruches.count()
-            ruches.delete()
-
+            # Supprimé avant les ruches : la suppression d'une campagne
+            # cascade sur ses CelluleRoyale (issue #25), qui protègent
+            # sinon leur ruche_orpheline (on_delete=PROTECT) contre la
+            # suppression ci-dessous.
             campagnes = CampagneElevage.objects.filter(nom__startswith=PREFIXE_TEST)
             nb_campagnes = campagnes.count()
             campagnes.delete()
+
+            ruches = Ruche.objects.filter(rucher__nom=NOM_RUCHER_TEST)
+            nb_ruches = ruches.count()
+            ruches.delete()
 
             # Supprimé après les campagnes (PROTECT empêche de supprimer un
             # LotCriteres encore référencé par une campagne, cf. issue #19).
             lots_criteres = LotCriteres.objects.filter(nom__startswith=PREFIXE_TEST)
             lots_criteres.delete()
 
+            # Supprimé après les campagnes (pour la même raison que
+            # ci-dessus : CelluleRoyale.mere protège sinon la Reine mère
+            # contre la suppression, cf. issue #25).
             reines = Reine.objects.filter(identifiant__startswith=PREFIXE_TEST)
             nb_reines = reines.count()
             reines.delete()

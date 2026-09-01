@@ -139,6 +139,18 @@ class StationFecondation(models.Model):
         return self.nom
 
 
+class StatutReine(models.TextChoices):
+    VIERGE = "VIERGE", "Vierge"
+    FECONDEE = "FECONDEE", "Fécondée"
+
+
+class ModeAcquisitionReine(models.TextChoices):
+    ELEVEE = "ELEVEE", "Élevée (sur le rucher)"
+    ACHETEE_CR = "ACHETEE_CR", "Achetée en cellule royale"
+    ACHETEE_VIERGE = "ACHETEE_VIERGE", "Achetée vierge"
+    ACHETEE_FECONDEE = "ACHETEE_FECONDEE", "Achetée fécondée"
+
+
 class Reine(models.Model):
     """Identité généalogique d'une reine, indépendante de la boîte."""
 
@@ -162,6 +174,20 @@ class Reine(models.Model):
     couleur_marquage = models.CharField(
         max_length=10, choices=CouleurMarquage.choices, blank=True,
     )
+    statut = models.CharField(
+        max_length=10, choices=StatutReine.choices, null=True, blank=True,
+        help_text="Vierge ou fécondée. Laissé vide sur les reines "
+                   "existantes avant l'introduction de ce champ (issue "
+                   "#25) — à compléter manuellement au besoin.",
+    )
+    mode_acquisition = models.CharField(
+        max_length=20, choices=ModeAcquisitionReine.choices, null=True, blank=True,
+        help_text="Élevée sur le rucher, ou achetée (en cellule royale, "
+                   "vierge ou déjà fécondée). Laissé vide sur les reines "
+                   "existantes avant l'introduction de ce champ (issue "
+                   "#25) — à compléter manuellement au besoin.",
+    )
+    date_fecondation = models.DateField(null=True, blank=True)
     date_naissance = models.DateField(null=True, blank=True)
     date_deces = models.DateField(
         null=True, blank=True,
@@ -331,27 +357,19 @@ class CampagneElevage(models.Model):
 
     @property
     def taux_reussite(self):
-        """Taux de réussite de l'élevage de cellules royales : nombre de CR
-        introduites dans les Apidea (étape GARNIR_APIDEA.nombre_cr) divisé
-        par le nombre de CR obtenues sur la ruche orpheline (étape
-        RUCHE_ORPHELINE.nombre_cr). Retourne None (« non calculable ») si
-        l'une des deux étapes est absente ou que son nombre_cr n'est pas
-        renseigné, ou si le nombre de CR obtenues est nul (pas de division
-        par zéro).
+        """Taux de réussite de l'élevage de cellules royales (issue #25) :
+        nombre de CelluleRoyale de la campagne ayant abouti à une reine
+        (statut=DEVENUE_REINE) divisé par le nombre total de CelluleRoyale
+        de la campagne. Retourne None (« non calculable ») si la campagne
+        n'a aucune CelluleRoyale (pas de division par zéro).
         """
-        etape_obtenues = self.etapes.filter(
-            type_etape=TypeEtapeCalendrier.RUCHE_ORPHELINE,
-        ).first()
-        etape_introduites = self.etapes.filter(
-            type_etape=TypeEtapeCalendrier.GARNIR_APIDEA,
-        ).first()
-        if (
-            etape_obtenues is None or etape_introduites is None
-            or etape_obtenues.nombre_cr is None or etape_introduites.nombre_cr is None
-            or etape_obtenues.nombre_cr == 0
-        ):
+        total = self.cellules_royales.count()
+        if total == 0:
             return None
-        return etape_introduites.nombre_cr / etape_obtenues.nombre_cr
+        reussies = self.cellules_royales.filter(
+            statut=StatutCelluleRoyale.DEVENUE_REINE,
+        ).count()
+        return reussies / total
 
 
 class TypeEtapeCalendrier(models.TextChoices):
@@ -359,12 +377,19 @@ class TypeEtapeCalendrier(models.TextChoices):
     (issue #14) : pas de starter séparé (fusionné avec l'élevage jusqu'à
     operculation sur la ruche orpheline), pas de couveuse, distribution
     directe des cellules royales dans les Apidea, pas de libération ni de
-    contrôle des naissances séparés."""
+    contrôle des naissances séparés.
+
+    L'étape RUCHE_ORPHELINE (issue #16) a été retirée par l'issue #25 :
+    son seul rôle (indiquer quelle ruche est orpheline) est devenu
+    redondant une fois que PICKING porte lui-même une ruche d'origine et
+    une ruche de destination (cf. EtapeCalendrier). Le suivi individuel de
+    chaque cellule royale (une ruche orpheline peut en élever plusieurs en
+    parallèle) vit désormais dans le modèle CelluleRoyale, pas dans une
+    étape agrégée du calendrier."""
 
     ELEVAGE_MALES = "ELEVAGE_MALES", "Élevage des mâles (saturation)"
     ORPHELINAGE = "ORPHELINAGE", "Orphelinage (règle des 9 jours)"
     PICKING = "PICKING", "Picking (greffage des larves)"
-    RUCHE_ORPHELINE = "RUCHE_ORPHELINE", "Ruche orpheline"
     GARNIR_APIDEA = "GARNIR_APIDEA", "Garnir les Apidea"
     CONTROLE_PONTE_GRILLE = (
         "CONTROLE_PONTE_GRILLE",
@@ -381,6 +406,16 @@ class EtapeCalendrier(models.Model):
     calculs.calculer_dates_etapes). `realisee`, `date_reelle` et `notes`
     sont saisies à la main et jamais écrasées par ce recalcul, pour
     permettre de tracer l'écart entre prévu et réel.
+
+    `ruche_origine`/`ruche_destination` (issue #25, remplace le champ
+    unique `ruche` de l'issue #16) s'utilisent selon l'étape : Orphelinage
+    (origine = colonie rendue orpheline, pas de destination) ; Picking
+    (origine = colonie ciblée pour les larves greffées, destination =
+    colonie orpheline qui les reçoit) ; Garnir les Apidea (aucune des deux
+    n'est obligatoire : cette étape reste un marqueur de date de
+    distribution générale, le détail par cellule royale vivant désormais
+    dans CelluleRoyale.apidea) ; Contrôle ponte et grille (origine =
+    l'Apidea concerné).
     """
 
     campagne = models.ForeignKey(
@@ -394,18 +429,20 @@ class EtapeCalendrier(models.Model):
         help_text="Date effectivement observée, si différente de la date "
                    "prévue (pour tracer les écarts).",
     )
-    ruche = models.ForeignKey(
+    ruche_origine = models.ForeignKey(
         Ruche, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name="etapes_calendrier",
-        help_text="Ruche ayant servi de colonie orpheline (pertinent "
-                   "surtout sur les étapes Orphelinage et Ruche orpheline).",
+        related_name="etapes_calendrier_origine",
+        help_text="Ruche d'origine selon l'étape : colonie rendue "
+                   "orpheline (Orphelinage), colonie ciblée pour les "
+                   "larves greffées (Picking), Apidea concerné (Contrôle "
+                   "ponte et grille).",
     )
-    nombre_cr = models.PositiveSmallIntegerField(
-        null=True, blank=True,
-        help_text="Nombre de cellules royales — obtenues sur l'étape Ruche "
-                   "orpheline, ou introduites dans les Apidea sur l'étape "
-                   "Garnir les Apidea (même champ générique pour les deux "
-                   "usages selon l'étape).",
+    ruche_destination = models.ForeignKey(
+        Ruche, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="etapes_calendrier_destination",
+        help_text="Ruche de destination — pertinent seulement sur "
+                   "l'étape Picking (colonie orpheline qui reçoit les "
+                   "larves).",
     )
     notes = models.TextField(blank=True)
 
@@ -421,6 +458,69 @@ class EtapeCalendrier(models.Model):
 
     def __str__(self):
         return f"{self.campagne} — {self.get_type_etape_display()} ({self.date_prevue})"
+
+
+class StatutCelluleRoyale(models.TextChoices):
+    EN_DEVELOPPEMENT = "EN_DEVELOPPEMENT", "En développement"
+    DEVENUE_REINE = "DEVENUE_REINE", "Devenue reine"
+    MORTE_AVANT_ECLOSION = "MORTE_AVANT_ECLOSION", "Morte avant éclosion"
+    PERDUE = "PERDUE", "Perdue"
+
+
+class CelluleRoyale(models.Model):
+    """Suivi individuel d'une tentative d'élevage de reine (issue #25).
+
+    Entité indépendante de Reine, pas un statut dessus : une CR peut
+    échouer (morte avant éclosion, perdue pendant la période fragile
+    ~J10-13) sans jamais devenir une Reine — modéliser ça comme un statut
+    de Reine obligerait à créer des fiches Reine pour des tentatives
+    ratées, ce qui empêcherait un vrai calcul de taux de réussite
+    (CampagneElevage.taux_reussite). Une ruche orpheline élève plusieurs
+    CR en parallèle, chacune finissant dans un seul Apidea : ce modèle
+    trace donc le parcours de chaque CR individuellement, là où
+    l'ancienne étape RUCHE_ORPHELINE du calendrier (issue #16, retirée
+    par l'issue #25) ne portait qu'un total agrégé par campagne. La CR
+    ne disparaît jamais, même en cas d'échec : c'est la trace de la
+    tentative elle-même qui permet le calcul de taux de réussite.
+    """
+
+    campagne = models.ForeignKey(
+        CampagneElevage, on_delete=models.CASCADE, related_name="cellules_royales",
+    )
+    mere = models.ForeignKey(
+        Reine, on_delete=models.PROTECT, related_name="cellules_royales_greffees",
+        help_text="Reine dont les larves ont été greffées.",
+    )
+    ruche_orpheline = models.ForeignKey(
+        Ruche, on_delete=models.PROTECT, related_name="cellules_royales_elevees",
+        help_text="Ruche orpheline ayant élevé cette cellule royale.",
+    )
+    apidea = models.ForeignKey(
+        Ruche, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="cellules_royales_introduites",
+        help_text="Apidea où la cellule a été introduite — une seule, "
+                   "jamais plusieurs.",
+    )
+    statut = models.CharField(
+        max_length=25, choices=StatutCelluleRoyale.choices,
+        default=StatutCelluleRoyale.EN_DEVELOPPEMENT,
+    )
+    reine = models.ForeignKey(
+        Reine, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="cellule_royale_origine",
+        help_text="Reine issue de cette cellule — renseignée uniquement "
+                   "si statut=Devenue reine (cf. action admin "
+                   "« Confirmer éclosion »).",
+    )
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = "Cellule royale"
+        verbose_name_plural = "Cellules royales"
+        ordering = ["-campagne__annee", "campagne__nom", "mere__identifiant"]
+
+    def __str__(self):
+        return f"{self.campagne} — fille de {self.mere} ({self.get_statut_display()})"
 
 
 class TypeMesure(models.TextChoices):

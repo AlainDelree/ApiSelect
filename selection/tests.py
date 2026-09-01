@@ -15,20 +15,26 @@ from .calculs import (
     calculer_dates_etapes,
     calculer_index,
     calculer_index_colonie,
+    lettre_lignee_fondatrice,
+    suggerer_identifiant_fille,
 )
 from .gestion_base_test import NOM_RUCHER_TEST
 from .models import (
     CampagneElevage,
+    CelluleRoyale,
     Colonie,
     CritereSelection,
     EtapeCalendrier,
     LotCriteres,
     Mesure,
+    ModeAcquisitionReine,
     ModeCreationColonie,
     PoidsCritere,
     Reine,
     Ruche,
     Rucher,
+    StatutCelluleRoyale,
+    StatutReine,
     TypeEtapeCalendrier,
     TypeRuche,
     VueColonieActive,
@@ -579,11 +585,6 @@ class CalculerDatesEtapesTests(TestCase):
     def test_picking_quatre_jours_apres_la_ponte(self):
         self.assertEqual(self.dates["PICKING"], date(2022, 6, 9))
 
-    def test_ruche_orpheline_le_meme_jour_que_le_picking(self):
-        # Pas de starter séparé : greffage direct dans la ruche orpheline
-        # qui élève les cellules royales jusqu'à operculation et au-delà.
-        self.assertEqual(self.dates["RUCHE_ORPHELINE"], self.dates["PICKING"])
-
     def test_garnir_apidea(self):
         # Distribution directe des cellules royales dans les Apidea (pas
         # de couveuse ni de ruchettes intermédiaires).
@@ -599,13 +600,12 @@ class CalculerDatesEtapesTests(TestCase):
 
     def test_decalages_geles_contre_regression_silencieuse(self):
         # Verrouille les valeurs exactes de la méthode réelle d'Alain
-        # (issue #14) : toute modification de DECALAGES_JOURS_ETAPES doit
-        # être volontaire.
+        # (issue #14, RUCHE_ORPHELINE retirée par l'issue #25) : toute
+        # modification de DECALAGES_JOURS_ETAPES doit être volontaire.
         self.assertEqual(DECALAGES_JOURS_ETAPES, {
             "ELEVAGE_MALES": -16,
             "ORPHELINAGE": -5,
             "PICKING": 4,
-            "RUCHE_ORPHELINE": 4,
             "GARNIR_APIDEA": 14,
             "CONTROLE_PONTE_GRILLE": 25,
         })
@@ -657,9 +657,9 @@ class RecalculAutomatiqueEtapesTests(TestCase):
         self.assertEqual(picking_1.date_prevue, date(2022, 6, 9))
         self.assertEqual(picking_2.date_prevue, date(2022, 6, 24))
         # elevage_males_actif=False par défaut (issue #14) : une étape de
-        # moins que le nombre total de types (6 depuis l'issue #16).
-        self.assertEqual(EtapeCalendrier.objects.filter(campagne=campagne_1).count(), 5)
-        self.assertEqual(EtapeCalendrier.objects.filter(campagne=campagne_2).count(), 5)
+        # moins que le nombre total de types (5 depuis l'issue #25).
+        self.assertEqual(EtapeCalendrier.objects.filter(campagne=campagne_1).count(), 4)
+        self.assertEqual(EtapeCalendrier.objects.filter(campagne=campagne_2).count(), 4)
 
     def test_marquage_realisee_preserve_par_un_recalcul_ulterieur(self):
         campagne = CampagneElevage.objects.create(
@@ -721,71 +721,185 @@ class ElevageMalesFacultatifTests(TestCase):
 
 
 class TauxReussiteCrTests(TestCase):
-    """Vérifie CampagneElevage.taux_reussite (issue #16) : CR introduites
-    dans les Apidea (étape GARNIR_APIDEA.nombre_cr) divisé par CR obtenues
-    sur la ruche orpheline (étape RUCHE_ORPHELINE.nombre_cr), avec gestion
-    propre des cas où le calcul est impossible (pas de division par
+    """Vérifie CampagneElevage.taux_reussite (issue #25) : nombre de
+    CelluleRoyale ayant abouti à une reine (statut=DEVENUE_REINE) divisé
+    par le nombre total de CelluleRoyale de la campagne, avec gestion
+    propre du cas où aucune CelluleRoyale n'existe (pas de division par
     zéro)."""
 
     def setUp(self):
         self.campagne = CampagneElevage.objects.create(
             nom="Campagne E", annee=2022, date_reference=date(2022, 6, 5),
         )
+        self.mere = Reine.objects.create(identifiant="A20")
+        type_ruche = TypeRuche.objects.get(code="DADANT10")
+        self.ruche_orpheline = Ruche.objects.create(type_ruche=type_ruche, numero=60)
+
+    def _creer_cellule(self, statut):
+        return CelluleRoyale.objects.create(
+            campagne=self.campagne, mere=self.mere,
+            ruche_orpheline=self.ruche_orpheline, statut=statut,
+        )
 
     def test_taux_reussite_cas_normal(self):
-        etape_obtenues = self.campagne.etapes.get(
-            type_etape=TypeEtapeCalendrier.RUCHE_ORPHELINE,
-        )
-        etape_obtenues.nombre_cr = 10
-        etape_obtenues.save()
-        etape_introduites = self.campagne.etapes.get(
-            type_etape=TypeEtapeCalendrier.GARNIR_APIDEA,
-        )
-        etape_introduites.nombre_cr = 8
-        etape_introduites.save()
+        for _ in range(3):
+            self._creer_cellule(StatutCelluleRoyale.DEVENUE_REINE)
+        self._creer_cellule(StatutCelluleRoyale.PERDUE)
 
-        self.assertEqual(self.campagne.taux_reussite, 0.8)
+        self.assertEqual(self.campagne.taux_reussite, 0.75)
 
-    def test_taux_reussite_non_calculable_si_donnees_manquantes(self):
-        # Aucun nombre_cr renseigné sur aucune des deux étapes.
+    def test_taux_reussite_non_calculable_si_aucune_cellule_royale(self):
         self.assertIsNone(self.campagne.taux_reussite)
 
-    def test_taux_reussite_non_calculable_si_une_seule_valeur_renseignee(self):
-        etape_obtenues = self.campagne.etapes.get(
-            type_etape=TypeEtapeCalendrier.RUCHE_ORPHELINE,
+    def test_taux_reussite_zero_si_toutes_en_developpement(self):
+        self._creer_cellule(StatutCelluleRoyale.EN_DEVELOPPEMENT)
+        self._creer_cellule(StatutCelluleRoyale.EN_DEVELOPPEMENT)
+
+        self.assertEqual(self.campagne.taux_reussite, 0.0)
+
+
+class EtapeCalendrierRucheOrigineDestinationTests(TestCase):
+    """Vérifie ruche_origine/ruche_destination sur EtapeCalendrier (issue
+    #25, remplace le champ unique `ruche` de l'issue #16)."""
+
+    def setUp(self):
+        self.campagne = CampagneElevage.objects.create(
+            nom="Campagne F", annee=2022, date_reference=date(2022, 6, 5),
         )
-        etape_obtenues.nombre_cr = 10
-        etape_obtenues.save()
-        # GARNIR_APIDEA.nombre_cr non renseigné.
 
-        self.assertIsNone(self.campagne.taux_reussite)
-
-    def test_taux_reussite_non_calculable_si_zero_cr_obtenues(self):
-        etape_obtenues = self.campagne.etapes.get(
-            type_etape=TypeEtapeCalendrier.RUCHE_ORPHELINE,
-        )
-        etape_obtenues.nombre_cr = 0
-        etape_obtenues.save()
-        etape_introduites = self.campagne.etapes.get(
-            type_etape=TypeEtapeCalendrier.GARNIR_APIDEA,
-        )
-        etape_introduites.nombre_cr = 0
-        etape_introduites.save()
-
-        self.assertIsNone(self.campagne.taux_reussite)
-
-    def test_champ_ruche_associable_a_une_etape(self):
+    def test_champs_ruche_origine_et_destination_associables_a_une_etape(self):
         type_ruche = TypeRuche.objects.get(code="DADANT10")
-        ruche = Ruche.objects.create(type_ruche=type_ruche, numero=42)
-        etape = self.campagne.etapes.get(type_etape=TypeEtapeCalendrier.RUCHE_ORPHELINE)
-        etape.ruche = ruche
-        etape.nombre_cr = 5
+        ruche_origine = Ruche.objects.create(type_ruche=type_ruche, numero=42)
+        ruche_destination = Ruche.objects.create(type_ruche=type_ruche, numero=43)
+        # Usage attendu sur PICKING : origine = colonie ciblée pour les
+        # larves, destination = colonie orpheline qui les reçoit.
+        etape = self.campagne.etapes.get(type_etape=TypeEtapeCalendrier.PICKING)
+        etape.ruche_origine = ruche_origine
+        etape.ruche_destination = ruche_destination
         etape.full_clean()
         etape.save()
 
         etape.refresh_from_db()
-        self.assertEqual(etape.ruche, ruche)
-        self.assertEqual(etape.nombre_cr, 5)
+        self.assertEqual(etape.ruche_origine, ruche_origine)
+        self.assertEqual(etape.ruche_destination, ruche_destination)
+
+
+class GenerationIdentifiantFilleTests(TestCase):
+    """Vérifie la convention de nommage des reines filles (issue #25) :
+    lettre de la lignée FONDATRICE (pas du parent immédiat) + année sur 2
+    chiffres + numéro de séquence, tous comptés sur l'ensemble des
+    Reines existantes."""
+
+    def test_fondatrice_sans_mere_retourne_sa_propre_lettre(self):
+        fondatrice = Reine.objects.create(identifiant="B24")
+        self.assertEqual(lettre_lignee_fondatrice(fondatrice), "B")
+
+    def test_cas_simple_fille_directe_dune_fondatrice(self):
+        fondatrice = Reine.objects.create(identifiant="A24")
+        self.assertEqual(suggerer_identifiant_fille(fondatrice, 2026), "A26-1")
+
+    def test_cas_multigeneration_remonte_a_la_fondatrice_pas_au_parent_immediat(self):
+        # Identifiants volontairement sans rapport avec la convention
+        # lettre+année (legacy / saisie libre), pour bien distinguer "la
+        # lettre de la fondatrice" de "la lettre du parent immédiat" :
+        # les deux coïncideraient toujours avec des identifiants bien
+        # formés, ce qui ne prouverait pas que la remontée est complète.
+        fondatrice = Reine.objects.create(identifiant="Zorro24")
+        intermediaire = Reine.objects.create(identifiant="Peu-Importe", mere=fondatrice)
+        petite_fille = Reine.objects.create(identifiant="Autre-Nom", mere=intermediaire)
+
+        self.assertEqual(lettre_lignee_fondatrice(petite_fille), "Z")
+        self.assertEqual(suggerer_identifiant_fille(petite_fille, 2028), "Z28-1")
+
+    def test_cas_sequence_deuxieme_fille_meme_lettre_et_annee(self):
+        fondatrice = Reine.objects.create(identifiant="A24")
+        Reine.objects.create(identifiant="A26-1", mere=fondatrice)
+
+        self.assertEqual(suggerer_identifiant_fille(fondatrice, 2026), "A26-2")
+
+    def test_annee_differente_repart_a_un(self):
+        fondatrice = Reine.objects.create(identifiant="A24")
+        Reine.objects.create(identifiant="A26-1", mere=fondatrice)
+
+        self.assertEqual(suggerer_identifiant_fille(fondatrice, 2027), "A27-1")
+
+
+class CelluleRoyaleTests(TestCase):
+    """Vérifie le modèle CelluleRoyale (issue #25) : suivi individuel
+    d'une tentative d'élevage, indépendant de Reine."""
+
+    def setUp(self):
+        self.campagne = CampagneElevage.objects.create(nom="Campagne G", annee=2026)
+        self.mere = Reine.objects.create(identifiant="A24")
+        type_ruche = TypeRuche.objects.get(code="DADANT10")
+        self.ruche_orpheline = Ruche.objects.create(type_ruche=type_ruche, numero=70)
+
+    def test_creation_avec_statut_par_defaut(self):
+        cellule = CelluleRoyale.objects.create(
+            campagne=self.campagne, mere=self.mere, ruche_orpheline=self.ruche_orpheline,
+        )
+        self.assertEqual(cellule.statut, StatutCelluleRoyale.EN_DEVELOPPEMENT)
+        self.assertIsNone(cellule.reine)
+        self.assertIsNone(cellule.apidea)
+
+    def test_str_lisible(self):
+        cellule = CelluleRoyale.objects.create(
+            campagne=self.campagne, mere=self.mere, ruche_orpheline=self.ruche_orpheline,
+        )
+        texte = str(cellule)
+        self.assertIn(self.campagne.nom, texte)
+        self.assertIn(self.mere.identifiant, texte)
+        self.assertIn("En développement", texte)
+
+
+class CelluleRoyaleAdminConfirmerEclosionTests(TestCase):
+    """Vérifie l'action admin "Confirmer éclosion → créer la Reine"
+    (issue #25) : transition EN_DEVELOPPEMENT -> DEVENUE_REINE, création
+    et liaison de la Reine, statuts déjà traités laissés intacts."""
+
+    def setUp(self):
+        self.superuser = get_user_model().objects.create_superuser(
+            username="admin-cr", email="admin-cr@example.com", password="motdepasse",
+        )
+        self.client.force_login(self.superuser)
+        self.campagne = CampagneElevage.objects.create(nom="Campagne H", annee=2026)
+        self.mere = Reine.objects.create(identifiant="A24")
+        type_ruche = TypeRuche.objects.get(code="DADANT10")
+        self.ruche_orpheline = Ruche.objects.create(type_ruche=type_ruche, numero=71)
+        self.cellule = CelluleRoyale.objects.create(
+            campagne=self.campagne, mere=self.mere, ruche_orpheline=self.ruche_orpheline,
+        )
+
+    def _lancer_action(self, cellule):
+        return self.client.post(
+            reverse("admin:selection_celluleroyale_changelist"),
+            {"action": "confirmer_eclosion", "_selected_action": [str(cellule.pk)]},
+            follow=True,
+        )
+
+    def test_confirmer_eclosion_cree_la_reine_et_lie_la_cellule(self):
+        response = self._lancer_action(self.cellule)
+
+        self.assertEqual(response.status_code, 200)
+        self.cellule.refresh_from_db()
+        self.assertEqual(self.cellule.statut, StatutCelluleRoyale.DEVENUE_REINE)
+        self.assertIsNotNone(self.cellule.reine)
+        self.assertEqual(self.cellule.reine.mere, self.mere)
+        self.assertEqual(self.cellule.reine.statut, StatutReine.VIERGE)
+        self.assertEqual(self.cellule.reine.mode_acquisition, ModeAcquisitionReine.ELEVEE)
+        annee_courte = date.today().year % 100
+        self.assertEqual(self.cellule.reine.identifiant, f"A{annee_courte:02d}-1")
+
+    def test_confirmer_eclosion_ignore_les_cellules_deja_traitees(self):
+        self.cellule.statut = StatutCelluleRoyale.PERDUE
+        self.cellule.save()
+
+        self._lancer_action(self.cellule)
+
+        self.cellule.refresh_from_db()
+        self.assertEqual(self.cellule.statut, StatutCelluleRoyale.PERDUE)
+        self.assertIsNone(self.cellule.reine)
+        self.assertFalse(Reine.objects.filter(mere=self.mere).exists())
 
 
 class CalendrierEtTachesViewsTests(TestCase):
@@ -835,7 +949,8 @@ class CalendrierEtTachesViewsTests(TestCase):
     def test_calendrier_expose_une_couleur_distincte_par_etape(self):
         """Palette fixe par type d'étape (issue #15) : chaque étape du
         contexte porte une couleur, et PICKING/GARNIR_APIDEA se
-        distinguent des 3 autres étapes."""
+        distinguent des 2 autres étapes (issue #25 : RUCHE_ORPHELINE
+        retirée)."""
         response = self.client.get(reverse("selection:calendrier"), {"annee": 2022, "mois": 6})
 
         etapes = [
@@ -1102,8 +1217,19 @@ class PeuplerDonneesTestCommandTests(TestCase):
 
         rucher = Rucher.objects.get(nom=NOM_RUCHER_TEST)
         self.assertEqual(Colonie.objects.filter(ruche__rucher=rucher).count(), 3)
-        self.assertEqual(Reine.objects.filter(identifiant__startswith="TEST-").count(), 3)
+        # 3 reines de colonie + 1 reine fille issue de la CelluleRoyale
+        # DEVENUE_REINE fictive (issue #25).
+        self.assertEqual(Reine.objects.filter(identifiant__startswith="TEST-").count(), 4)
         self.assertTrue(CampagneElevage.objects.filter(nom__startswith="TEST-").exists())
+
+    def test_cree_des_cellules_royales_fictives_couvrant_les_statuts_cles(self):
+        call_command("peupler_donnees_test")
+
+        campagne = CampagneElevage.objects.get(nom__startswith="TEST-")
+        statuts = set(campagne.cellules_royales.values_list("statut", flat=True))
+        self.assertIn(StatutCelluleRoyale.DEVENUE_REINE, statuts)
+        self.assertIn(StatutCelluleRoyale.MORTE_AVANT_ECLOSION, statuts)
+        self.assertIsNotNone(campagne.taux_reussite)
 
     def test_cree_une_colonie_exclue_par_seuil(self):
         call_command("peupler_donnees_test")
@@ -1189,7 +1315,7 @@ class ReinitialiserDonneesTestCommandTests(TestCase):
 
         rucher = Rucher.objects.get(nom=NOM_RUCHER_TEST)
         self.assertEqual(Colonie.objects.filter(ruche__rucher=rucher).count(), 3)
-        self.assertEqual(Reine.objects.filter(identifiant__startswith="TEST-").count(), 3)
+        self.assertEqual(Reine.objects.filter(identifiant__startswith="TEST-").count(), 4)
         self.assertTrue(CampagneElevage.objects.filter(nom__startswith="TEST-").exists())
 
     def test_purge_lancien_jeu_avant_de_repeupler(self):
@@ -1200,4 +1326,4 @@ class ReinitialiserDonneesTestCommandTests(TestCase):
 
         self.assertEqual(Rucher.objects.filter(nom=NOM_RUCHER_TEST).count(), 1)
         self.assertFalse(Reine.objects.filter(pk=ancienne_reine_pk).exists())
-        self.assertEqual(Reine.objects.filter(identifiant__startswith="TEST-").count(), 3)
+        self.assertEqual(Reine.objects.filter(identifiant__startswith="TEST-").count(), 4)

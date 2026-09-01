@@ -125,23 +125,29 @@ def calculer_index_colonie(colonie_id: int, campagne_id: int) -> ResultatIndex:
 # distribution), distribution directe dans les Apidea après la période de
 # fragilité (nymphose ~J10-J13) et avant la naissance (~J16), pas de
 # libération ni de contrôle des naissances séparés. Les décalages
-# PICKING/RUCHE_ORPHELINE (+4j, greffage d'une larve de 12-36h à J4) et
-# ELEVAGE_MALES (-16j, saturation) sont inchangés de l'issue #7. Les
-# décalages GARNIR_APIDEA (+14j) et CONTROLE_PONTE_GRILLE (+25j) sont
-# ceux fournis par Alain pour sa méthode réelle (issue #14), pas des
-# cellules de l'ODS. Le décalage ORPHELINAGE (-5j) est ajouté par l'issue
-# #16 : « loi des 9 jours » du cours Maranzan/CRISAB — 3 jours de stade œuf
-# + 6 jours de couvain ouvert, période après laquelle la colonie rendue
-# orpheline n'a plus de couvain ouvrable pour élever elle-même une reine et
-# est donc réellement prête à prendre en charge le greffage (PICKING).
+# PICKING (+4j, greffage d'une larve de 12-36h à J4) et ELEVAGE_MALES
+# (-16j, saturation) sont inchangés de l'issue #7. Les décalages
+# GARNIR_APIDEA (+14j) et CONTROLE_PONTE_GRILLE (+25j) sont ceux fournis
+# par Alain pour sa méthode réelle (issue #14), pas des cellules de
+# l'ODS. Le décalage ORPHELINAGE (-5j) est ajouté par l'issue #16 : « loi
+# des 9 jours » du cours Maranzan/CRISAB — 3 jours de stade œuf + 6 jours
+# de couvain ouvert, période après laquelle la colonie rendue orpheline
+# n'a plus de couvain ouvrable pour élever elle-même une reine et est
+# donc réellement prête à prendre en charge le greffage (PICKING).
 # Calcul : PICKING (+4j) − 9j = -5j depuis la ponte de référence.
+#
+# L'étape RUCHE_ORPHELINE (même date que PICKING, +4j) est retirée par
+# l'issue #25 : son rôle (indiquer quelle ruche est orpheline) est
+# redondant maintenant que PICKING porte lui-même ruche_origine/
+# ruche_destination (cf. selection/models.py, EtapeCalendrier), et le
+# suivi individuel de chaque cellule royale vit dans le modèle
+# CelluleRoyale plutôt que dans une étape agrégée du calendrier.
 # ---------------------------------------------------------------------------
 
 DECALAGES_JOURS_ETAPES = {
     "ELEVAGE_MALES": -16,
     "ORPHELINAGE": -5,
     "PICKING": 4,
-    "RUCHE_ORPHELINE": 4,
     "GARNIR_APIDEA": 14,
     "CONTROLE_PONTE_GRILLE": 25,
 }
@@ -158,3 +164,49 @@ def calculer_dates_etapes(date_ponte):
         code: date_ponte + timedelta(days=decalage)
         for code, decalage in DECALAGES_JOURS_ETAPES.items()
     }
+
+
+# ---------------------------------------------------------------------------
+# Convention de nommage des reines filles (issue #25)
+#
+# Le nom porte la lettre de la lignée FONDATRICE (pas du parent immédiat)
+# + année de naissance + numéro de séquence dans cette lignée/année,
+# toutes campagnes confondues (la génétique de la mère ne change pas
+# entre deux vagues de picking de la même saison — seul le père varie,
+# non tracé dans le nom). Rejeté : chaînage complet du parent immédiat
+# (ex. A24-1-1-1...), illisible sur plusieurs générations. La généalogie
+# fine complète reste consultable via Reine.mere et la vue
+# vue_genealogie_reines — le nom est un repère rapide, pas la source de
+# vérité généalogique.
+# ---------------------------------------------------------------------------
+
+def lettre_lignee_fondatrice(reine):
+    """Remonte récursivement `reine.mere` jusqu'à une reine sans mère
+    connue (la fondatrice de la lignée), retourne la première lettre de
+    son identifiant (majuscule)."""
+    fondatrice = reine
+    while fondatrice.mere is not None:
+        fondatrice = fondatrice.mere
+    return fondatrice.identifiant[0].upper()
+
+
+def suggerer_identifiant_fille(mere, annee_naissance):
+    """Suggère un identifiant pour une fille de `mere`, née en
+    `annee_naissance` : lettre de la lignée fondatrice + année sur 2
+    chiffres + prochain numéro de séquence disponible pour cette
+    combinaison lettre+année, tous comptés sur l'ensemble des Reines
+    existantes (peu importe la campagne). Ex. A26-1, A26-2, puis A27-1
+    l'année suivante — toujours la lettre de la fondatrice, jamais celle
+    du parent immédiat.
+    """
+    from .models import Reine  # import différé : évite un cycle au chargement de l'app
+
+    prefixe = f"{lettre_lignee_fondatrice(mere)}{annee_naissance % 100:02d}-"
+    prochain_numero = 1
+    for identifiant in Reine.objects.filter(
+        identifiant__startswith=prefixe,
+    ).values_list("identifiant", flat=True):
+        suffixe = identifiant[len(prefixe):]
+        if suffixe.isdigit():
+            prochain_numero = max(prochain_numero, int(suffixe) + 1)
+    return f"{prefixe}{prochain_numero}"
