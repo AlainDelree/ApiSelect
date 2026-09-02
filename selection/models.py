@@ -631,7 +631,7 @@ class Mesure(models.Model):
         CritereSelection, on_delete=models.PROTECT, related_name="mesures",
     )
     campagne = models.ForeignKey(
-        CampagneElevage, on_delete=models.SET_NULL, null=True, blank=True,
+        CampagneElevage, on_delete=models.PROTECT,
         related_name="mesures",
     )
     date_mesure = models.DateField()
