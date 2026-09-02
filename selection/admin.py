@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 
 from django import forms
 from django.contrib import admin, messages
@@ -83,6 +83,14 @@ class EvenementColonieInline(admin.TabularInline):
 
 @admin.register(Colonie)
 class ColonieAdmin(admin.ModelAdmin):
+    """`date_creation` est optionnelle (issue #29 : parfois inconnue pour
+    une colonie déjà existante avant la reprise de l'élevage). Rien
+    n'empêche pour autant une valeur incohérente avec la naissance de la
+    reine actuelle (ex. date_creation saisie comme si elle correspondait
+    à l'introduction de la reine plutôt qu'à la création réelle,
+    potentiellement bien antérieure, de la colonie) : `save_model` pose
+    alors un avertissement non bloquant (cf. docstring de la méthode)."""
+
     list_display = [
         "__str__", "ruche", "reine_actuelle", "mode_creation",
         "date_creation", "active",
@@ -91,6 +99,31 @@ class ColonieAdmin(admin.ModelAdmin):
     search_fields = ["ruche__numero", "reine_actuelle__identifiant"]
     autocomplete_fields = ["ruche", "reine_actuelle"]
     inlines = [ConfigurationColonieInline, EvenementColonieInline]
+
+    DELAI_MINIMUM_AVANT_NAISSANCE_REINE = timedelta(days=30)
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+
+        reine = obj.reine_actuelle
+        if (
+            reine is None
+            or reine.date_naissance is None
+            or obj.date_creation is None
+        ):
+            return
+
+        delai = reine.date_naissance - obj.date_creation
+        if delai < self.DELAI_MINIMUM_AVANT_NAISSANCE_REINE:
+            messages.warning(
+                request,
+                f"Date de création ({obj.date_creation}) incohérente avec "
+                f"la naissance de la reine actuelle {reine.identifiant} "
+                f"({reine.date_naissance}) : moins d'un mois d'écart (voire "
+                "postérieure). Si la colonie existait déjà avant cette "
+                "reine (remérage), corrigez la date de création — sinon "
+                "ignorez cet avertissement. L'enregistrement a bien eu lieu.",
+            )
 
 
 class EtapeCalendrierInline(admin.TabularInline):

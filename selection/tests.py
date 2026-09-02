@@ -1433,3 +1433,150 @@ class MarquerEtapeRealiseeDepuisTachesTests(TestCase):
         self.assertEqual(response.status_code, 405)
         self.etape.refresh_from_db()
         self.assertFalse(self.etape.realisee)
+
+
+def _donnees_formulaire_colonie(ruche, date_creation="", reine_actuelle=None):
+    """Données minimales pour un POST sur admin:selection_colonie_add,
+    formsets d'inlines (configurations/événements) vides inclus."""
+    return {
+        "ruche": str(ruche.id),
+        "reine_actuelle": str(reine_actuelle.id) if reine_actuelle else "",
+        "mode_creation": ModeCreationColonie.ORIGINE_INCONNUE,
+        "date_creation": date_creation,
+        "active": "on",
+        "date_fin": "",
+        "notes": "",
+        "configurations-TOTAL_FORMS": "0",
+        "configurations-INITIAL_FORMS": "0",
+        "configurations-MIN_NUM_FORMS": "0",
+        "configurations-MAX_NUM_FORMS": "1000",
+        "evenements-TOTAL_FORMS": "0",
+        "evenements-INITIAL_FORMS": "0",
+        "evenements-MIN_NUM_FORMS": "0",
+        "evenements-MAX_NUM_FORMS": "1000",
+        "_save": "Enregistrer",
+    }
+
+
+class ColonieDateCreationOptionnelleTests(TestCase):
+    """`Colonie.date_creation` devient optionnelle (issue #29) : une date
+    parfois inconnue (colonie déjà existante avant la reprise de
+    l'élevage) ne doit plus bloquer l'enregistrement, ni au niveau du
+    modèle ni depuis l'admin."""
+
+    def setUp(self):
+        type_ruche = TypeRuche.objects.get(code="DADANT10")
+        self.ruche = Ruche.objects.create(type_ruche=type_ruche, numero=97)
+        self.superuser = get_user_model().objects.create_superuser(
+            username="admin_date_creation", email="admin_dc@example.com",
+            password="motdepasse",
+        )
+        self.client.force_login(self.superuser)
+
+    def test_colonie_sans_date_creation_acceptee_au_niveau_modele(self):
+        colonie = Colonie.objects.create(
+            ruche=self.ruche, mode_creation=ModeCreationColonie.ORIGINE_INCONNUE,
+            active=True,
+        )
+
+        colonie.full_clean()
+        self.assertIsNone(colonie.date_creation)
+
+    def test_colonie_sans_date_creation_acceptee_via_ladmin(self):
+        response = self.client.post(
+            reverse("admin:selection_colonie_add"),
+            _donnees_formulaire_colonie(self.ruche),
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        colonie = Colonie.objects.get(ruche=self.ruche)
+        self.assertIsNone(colonie.date_creation)
+
+
+class ColonieAdminAvertissementDateCreationTests(TestCase):
+    """`ColonieAdmin.save_model` (issue #29) pose un avertissement non
+    bloquant si `date_creation` est incohérente avec la naissance de la
+    reine actuelle. Règle retenue : la colonie est censée avoir existé
+    au moins un mois avant la naissance de sa reine actuelle (cas
+    normal du remérage sur colonie ancienne) ; un écart inférieur à un
+    mois — voire une `date_creation` postérieure à la naissance de la
+    reine — déclenche l'avertissement, sans jamais empêcher
+    l'enregistrement."""
+
+    def setUp(self):
+        type_ruche = TypeRuche.objects.get(code="DADANT10")
+        self.ruche = Ruche.objects.create(type_ruche=type_ruche, numero=98)
+        self.reine = Reine.objects.create(
+            identifiant="R-Test29-01", date_naissance=date(2026, 6, 1),
+        )
+        self.superuser = get_user_model().objects.create_superuser(
+            username="admin_coherence", email="admin_coherence@example.com",
+            password="motdepasse",
+        )
+        self.client.force_login(self.superuser)
+
+    def test_avertissement_si_date_creation_proche_ou_posterieure_a_la_naissance(self):
+        response = self.client.post(
+            reverse("admin:selection_colonie_add"),
+            _donnees_formulaire_colonie(
+                self.ruche, date_creation="2026-06-15", reine_actuelle=self.reine,
+            ),
+            follow=True,
+        )
+
+        messages_affiches = [str(message) for message in response.context["messages"]]
+        self.assertTrue(any("incohérente" in message for message in messages_affiches))
+        colonie = Colonie.objects.get(ruche=self.ruche)
+        self.assertEqual(colonie.date_creation, date(2026, 6, 15))
+
+    def test_aucun_avertissement_si_colonie_bien_anterieure_a_la_reine(self):
+        response = self.client.post(
+            reverse("admin:selection_colonie_add"),
+            _donnees_formulaire_colonie(
+                self.ruche, date_creation="2020-01-01", reine_actuelle=self.reine,
+            ),
+            follow=True,
+        )
+
+        messages_affiches = [str(message) for message in response.context["messages"]]
+        self.assertFalse(any("incohérente" in message for message in messages_affiches))
+        colonie = Colonie.objects.get(ruche=self.ruche)
+        self.assertEqual(colonie.date_creation, date(2020, 1, 1))
+
+    def test_aucun_avertissement_sans_reine_actuelle(self):
+        response = self.client.post(
+            reverse("admin:selection_colonie_add"),
+            _donnees_formulaire_colonie(self.ruche, date_creation="2026-06-15"),
+            follow=True,
+        )
+
+        messages_affiches = [str(message) for message in response.context["messages"]]
+        self.assertFalse(any("incohérente" in message for message in messages_affiches))
+
+
+class NouveauxModesAcquisitionReineTests(TestCase):
+    """`ModeAcquisitionReine` (issue #29) gagne "Arrivée avec un essaim"
+    et "Remérage naturel", pour les essaims capturés avec leur reine
+    déjà en place et les reines produites par la colonie elle-même
+    (supersédure/sauveté, cf. reine A24)."""
+
+    def test_arrivee_essaim_est_un_choix_valide(self):
+        reine = Reine.objects.create(
+            identifiant="R-Essaim-01", mode_acquisition=ModeAcquisitionReine.ARRIVEE_ESSAIM,
+        )
+
+        reine.full_clean()
+        self.assertEqual(reine.get_mode_acquisition_display(), "Arrivée avec un essaim")
+
+    def test_remerage_naturel_est_un_choix_valide(self):
+        reine = Reine.objects.create(
+            identifiant="R-Remerage-01",
+            mode_acquisition=ModeAcquisitionReine.REMERAGE_NATUREL,
+        )
+
+        reine.full_clean()
+        self.assertEqual(
+            reine.get_mode_acquisition_display(),
+            "Remérage naturel (par la colonie elle-même)",
+        )
