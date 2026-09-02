@@ -13,6 +13,10 @@
         tr.passee { background: #fdecea; }
         .badge-etape { padding: 0.15em 0.5em; border-radius: 3px; }
         .message { padding: 1em; background: #fff3cd; border: 1px solid #ffeeba; border-radius: 4px; }
+        .messages { list-style: none; padding: 0; margin: 0 0 1em; }
+        .messages li { padding: 0.6em 1em; border-radius: 4px; margin-bottom: 0.5em; }
+        .messages li.success { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+        .bouton-marquer-realisee { padding: 0.2em 0.6em; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -20,6 +24,14 @@
     <p class="lien-retour"><a href="{% url 'admin:index' %}">&larr; Retour à l'administration</a></p>
     <h1>Tâches à venir</h1>
     <p><a href="{% url 'selection:calendrier' %}">Voir le calendrier mensuel &rarr;</a></p>
+
+    {% if messages %}
+        <ul class="messages">
+            {% for message in messages %}
+                <li class="{{ message.tags }}">{{ message }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
 
     {% if not etapes %}
         <p class="message">Aucune étape en attente : toutes les campagnes actives sont soit
@@ -44,7 +56,12 @@
                                 {{ etape.get_type_etape_display }}
                             </span>
                         </td>
-                        <td><a href="{% url 'admin:selection_etapecalendrier_change' etape.id %}">Marquer réalisée &rarr;</a></td>
+                        <td>
+                            <form method="post" action="{% url 'selection:marquer_etape_realisee' etape.id %}">
+                                {% csrf_token %}
+                                <button type="submit" class="bouton-marquer-realisee">Marquer réalisée</button>
+                            </form>
+                        </td>
                     </tr>
                 {% endfor %}
             </tbody>

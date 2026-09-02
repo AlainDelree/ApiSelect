@@ -1368,3 +1368,68 @@ class ReinitialiserDonneesTestCommandTests(TestCase):
         self.assertEqual(Rucher.objects.filter(nom=NOM_RUCHER_TEST).count(), 1)
         self.assertFalse(Reine.objects.filter(pk=ancienne_reine_pk).exists())
         self.assertEqual(Reine.objects.filter(identifiant__startswith="TEST-").count(), 4)
+
+
+class MarquerEtapeRealiseeDepuisTachesTests(TestCase):
+    """Vérifie la vue `selection:marquer_etape_realisee` (issue #28) :
+    marquage direct depuis la liste des tâches, sans passer par l'admin."""
+
+    def setUp(self):
+        self.campagne = CampagneElevage.objects.create(
+            nom="Campagne I", annee=2026, date_reference=date(2026, 6, 5),
+        )
+        self.etape = self.campagne.etapes.get(type_etape=TypeEtapeCalendrier.PICKING)
+
+    def test_marque_letape_realisee_et_redirige_vers_la_liste(self):
+        response = self.client.post(
+            reverse("selection:marquer_etape_realisee", args=[self.etape.id]),
+        )
+
+        self.assertRedirects(response, reverse("selection:taches"))
+        self.etape.refresh_from_db()
+        self.assertTrue(self.etape.realisee)
+
+    def test_renseigne_la_date_reelle_a_aujourdhui_si_absente(self):
+        self.assertIsNone(self.etape.date_reelle)
+
+        self.client.post(reverse("selection:marquer_etape_realisee", args=[self.etape.id]))
+
+        self.etape.refresh_from_db()
+        self.assertEqual(self.etape.date_reelle, date.today())
+
+    def test_necrase_pas_une_date_reelle_deja_renseignee(self):
+        date_deja_saisie = date(2026, 6, 1)
+        self.etape.date_reelle = date_deja_saisie
+        self.etape.save()
+
+        self.client.post(reverse("selection:marquer_etape_realisee", args=[self.etape.id]))
+
+        self.etape.refresh_from_db()
+        self.assertEqual(self.etape.date_reelle, date_deja_saisie)
+
+    def test_message_de_succes_contient_le_nom_de_letape(self):
+        response = self.client.post(
+            reverse("selection:marquer_etape_realisee", args=[self.etape.id]),
+            follow=True,
+        )
+
+        messages_affiches = [str(message) for message in response.context["messages"]]
+        self.assertEqual(len(messages_affiches), 1)
+        self.assertIn("Picking (greffage des larves)", messages_affiches[0])
+
+    def test_letape_disparait_de_la_liste_des_taches_apres_marquage(self):
+        self.client.post(reverse("selection:marquer_etape_realisee", args=[self.etape.id]))
+
+        response = self.client.get(reverse("selection:taches"))
+
+        etapes_affichees = list(response.context["etapes"])
+        self.assertNotIn(self.etape, etapes_affichees)
+
+    def test_get_direct_sur_lurl_est_refuse(self):
+        response = self.client.get(
+            reverse("selection:marquer_etape_realisee", args=[self.etape.id]),
+        )
+
+        self.assertEqual(response.status_code, 405)
+        self.etape.refresh_from_db()
+        self.assertFalse(self.etape.realisee)

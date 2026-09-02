@@ -2,9 +2,11 @@ import calendar
 from collections import defaultdict
 from datetime import date, timedelta
 
+from django.contrib import messages
 from django.http import HttpResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
+from django.views.decorators.http import require_POST
 from xhtml2pdf import pisa
 
 from .calculs import calculer_index_colonie
@@ -153,9 +155,9 @@ def liste_taches(request):
     """Liste chronologique des prochaines étapes non réalisées, toutes
     campagnes confondues, avec le nom de la campagne et le type d'étape.
 
-    Marquer une étape comme réalisée se fait depuis sa fiche dans
-    l'administration (cohérent avec le reste de l'app, où l'admin reste
-    l'unique point de saisie) — cf. rapport de clôture pour ce choix.
+    Marquer une étape comme réalisée se fait directement depuis cette
+    liste (cf. `marquer_etape_realisee`, issue #28) plutôt que de passer
+    par l'admin.
     """
     etapes = (
         EtapeCalendrier.objects
@@ -169,6 +171,31 @@ def liste_taches(request):
         "etapes": etapes,
         "aujourdhui": date.today(),
     })
+
+
+@require_POST
+def marquer_etape_realisee(request, etape_id):
+    """Marque une étape du calendrier comme réalisée depuis la liste des
+    tâches (issue #28), sans passer par l'admin. `date_reelle` n'est
+    renseignée à la date du jour que si elle n'est pas déjà remplie —
+    une saisie manuelle antérieure (via l'admin) ne doit pas être
+    écrasée.
+
+    POST uniquement (`@require_POST` : un GET direct sur l'URL ne doit
+    pas pouvoir déclencher l'action). Pas de vérification d'authenti-
+    fication supplémentaire : aucune autre vue personnalisée de l'app
+    n'en impose (cf. rapport de clôture) — usage local mono-utilisateur,
+    seul l'admin Django lui-même reste protégé par son propre login.
+    """
+    etape = get_object_or_404(EtapeCalendrier, pk=etape_id)
+    etape.realisee = True
+    if etape.date_reelle is None:
+        etape.date_reelle = date.today()
+    etape.save()
+    messages.success(
+        request, f'« {etape.get_type_etape_display()} » marqué comme fait !'
+    )
+    return redirect("selection:taches")
 
 
 def _campagne_selectionnee(request):
