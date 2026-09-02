@@ -975,6 +975,19 @@ class CalendrierEtTachesViewsTests(TestCase):
         for etape in etapes:
             self.assertTrue(etape.couleur["fond"].startswith("#"))
 
+    def test_calendrier_affiche_le_type_etape_en_gras_avant_la_campagne(self):
+        """Le type d'étape (action concrète) doit sauter aux yeux avant le
+        nom de campagne : gras en premier, campagne ensuite (issue #27)."""
+        response = self.client.get(reverse("selection:calendrier"), {"annee": 2022, "mois": 6})
+        contenu = response.content.decode()
+
+        position_type_etape_gras = contenu.find('class="type-etape-nom">Picking')
+        position_campagne_nom = contenu.find("Campagne 2022")
+
+        self.assertNotEqual(position_type_etape_gras, -1)
+        self.assertNotEqual(position_campagne_nom, -1)
+        self.assertLess(position_type_etape_gras, position_campagne_nom)
+
 
 class FichesTerrainPdfTests(TestCase):
     """Tests des fiches de terrain PDF (issue #8) : génération réussie
