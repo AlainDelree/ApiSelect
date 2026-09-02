@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <title>Diagnostic — ApiSelect</title>
+    <style>
+        body { font-family: sans-serif; margin: 2em; color: #222; }
+        h1 { margin-bottom: 0.2em; }
+        h2 { margin-top: 2em; font-size: 1.1em; }
+        .lien-retour { margin-bottom: 1.5em; display: inline-block; }
+        .total { font-weight: bold; }
+        .message-propre { padding: 1em; background: #d4edda; border: 1px solid #c3e6cb;
+            border-radius: 4px; color: #155724; }
+        .groupe { margin-top: 1em; }
+        .groupe-vide { color: #777; font-style: italic; }
+        ul.avertissements { list-style: none; padding: 0; margin: 0.5em 0 0; }
+        ul.avertissements li { padding: 0.6em 1em; background: #fff3cd; border: 1px solid #ffeeba;
+            border-radius: 4px; margin-bottom: 0.5em; }
+        ul.avertissements li a { margin-left: 0.5em; }
+    </style>
+</head>
+<body>
+    {% include "selection/_bandeau_test.html" %}
+    <p class="lien-retour"><a href="{% url 'admin:index' %}">&larr; Retour à l'administration</a></p>
+    <h1>Diagnostic</h1>
+    <p>Vérifications de cohérence des données, purement consultatives : rien n'est bloqué,
+        rien n'est modifié — juste des oublis probables à corriger au besoin.</p>
+
+    {% if not total %}
+        <p class="message-propre">Aucun problème détecté.</p>
+    {% else %}
+        <p class="total">{{ total }} avertissement{{ total|pluralize }} au total.</p>
+
+        {% for titre, avertissements in resultats %}
+            {% if avertissements %}
+                <div class="groupe">
+                    <h2>{{ titre }} ({{ avertissements|length }})</h2>
+                    <ul class="avertissements">
+                        {% for avertissement in avertissements %}
+                            <li>
+                                {{ avertissement.message }}
+                                {% if avertissement.url_admin %}
+                                    <a href="{{ avertissement.url_admin }}">Corriger &rarr;</a>
+                                {% endif %}
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% endif %}
+        {% endfor %}
+    {% endif %}
+</body>
+</html>

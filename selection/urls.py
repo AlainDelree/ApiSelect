@@ -8,6 +8,7 @@ urlpatterns = [
     path("resultats/", views.resultats_selection, name="resultats"),
     path("calendrier/", views.calendrier_elevage, name="calendrier"),
     path("taches/", views.liste_taches, name="taches"),
+    path("diagnostic/", views.diagnostic, name="diagnostic"),
     path(
         "taches/<int:etape_id>/marquer-realisee/",
         views.marquer_etape_realisee,

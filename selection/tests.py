@@ -18,6 +18,14 @@ from .calculs import (
     lettre_lignee_fondatrice,
     suggerer_identifiant_fille,
 )
+from .diagnostics import (
+    campagnes_actives_sans_lot_criteres,
+    cellules_royales_statut_reine_incoherents,
+    colonies_actives_ruche_invalide_ou_inactive,
+    lots_criteres_tous_poids_nuls,
+    mesures_score_hors_intervalle,
+    reines_genealogie_chronologie_incoherente,
+)
 from .gestion_base_test import NOM_RUCHER_TEST
 from .models import (
     CampagneElevage,
@@ -1580,3 +1588,248 @@ class NouveauxModesAcquisitionReineTests(TestCase):
             reine.get_mode_acquisition_display(),
             "Remérage naturel (par la colonie elle-même)",
         )
+
+
+class DiagnosticsTests(TestCase):
+    """Un test déclencheur + un test non-déclencheur par vérification de
+    `selection/diagnostics.py` (issue #32)."""
+
+    def _creer_colonie(self, numero, ruche=None, active=True):
+        if ruche is None:
+            type_ruche = TypeRuche.objects.get(code="DADANT10")
+            ruche = Ruche.objects.create(type_ruche=type_ruche, numero=numero)
+        return Colonie.objects.create(
+            ruche=ruche, mode_creation=ModeCreationColonie.ORIGINE_INCONNUE,
+            active=active,
+        )
+
+    def _creer_cellule_royale(self, numero_ruche, statut, reine=None):
+        campagne = CampagneElevage.objects.create(
+            nom=f"Campagne CR {numero_ruche}", annee=2026,
+        )
+        mere = Reine.objects.create(identifiant=f"R-Mere-CR-{numero_ruche}")
+        type_ruche = TypeRuche.objects.get(code="DADANT10")
+        ruche_orpheline = Ruche.objects.create(type_ruche=type_ruche, numero=numero_ruche)
+        return CelluleRoyale.objects.create(
+            campagne=campagne, mere=mere, ruche_orpheline=ruche_orpheline,
+            statut=statut, reine=reine,
+        )
+
+    # -- Campagnes actives sans lot de critères -----------------------
+
+    def test_campagne_active_par_mesure_sans_lot_declenche_avertissement(self):
+        campagne = CampagneElevage.objects.create(nom="Campagne A", annee=2026)
+        colonie = self._creer_colonie(1)
+        Mesure.objects.create(
+            colonie=colonie, critere=CritereSelection.objects.get(code="SANTE"),
+            campagne=campagne, date_mesure="2026-05-01", valeur_brute="ras",
+        )
+
+        avertissements = campagnes_actives_sans_lot_criteres()
+
+        self.assertTrue(any("Campagne A" in a.message for a in avertissements))
+
+    def test_campagne_active_par_etape_sans_lot_declenche_avertissement(self):
+        CampagneElevage.objects.create(
+            nom="Campagne D", annee=2026, date_reference=date(2026, 6, 5),
+        )
+
+        avertissements = campagnes_actives_sans_lot_criteres()
+
+        self.assertTrue(any("Campagne D" in a.message for a in avertissements))
+
+    def test_campagne_sans_mesure_ni_etape_ne_declenche_rien(self):
+        CampagneElevage.objects.create(nom="Campagne B", annee=2026)
+
+        avertissements = campagnes_actives_sans_lot_criteres()
+
+        self.assertFalse(any("Campagne B" in a.message for a in avertissements))
+
+    def test_campagne_active_avec_lot_assigne_ne_declenche_rien(self):
+        lot = LotCriteres.objects.create(nom="Lot C")
+        campagne = CampagneElevage.objects.create(
+            nom="Campagne C", annee=2026, lot_criteres=lot,
+        )
+        colonie = self._creer_colonie(2)
+        Mesure.objects.create(
+            colonie=colonie, critere=CritereSelection.objects.get(code="SANTE"),
+            campagne=campagne, date_mesure="2026-05-01", valeur_brute="ras",
+        )
+
+        avertissements = campagnes_actives_sans_lot_criteres()
+
+        self.assertFalse(any("Campagne C" in a.message for a in avertissements))
+
+    # -- Lots de critères à poids tous nuls ----------------------------
+
+    def test_lot_tous_poids_nuls_declenche_avertissement(self):
+        LotCriteres.objects.create(nom="Lot vierge")
+
+        avertissements = lots_criteres_tous_poids_nuls()
+
+        self.assertTrue(any("Lot vierge" in a.message for a in avertissements))
+
+    def test_lot_avec_un_poids_non_nul_ne_declenche_rien(self):
+        lot = LotCriteres.objects.create(nom="Lot configuré")
+        PoidsCritere.objects.filter(
+            lot=lot, critere=CritereSelection.objects.get(code="SANTE"),
+        ).update(poids=5)
+
+        avertissements = lots_criteres_tous_poids_nuls()
+
+        self.assertFalse(any("Lot configuré" in a.message for a in avertissements))
+
+    # -- Colonies actives à ruche invalide ou inactive -----------------
+
+    def test_colonie_active_sur_ruche_inactive_declenche_avertissement(self):
+        type_ruche = TypeRuche.objects.get(code="DADANT10")
+        ruche = Ruche.objects.create(type_ruche=type_ruche, numero=50, actif=False)
+        colonie = self._creer_colonie(50, ruche=ruche)
+
+        avertissements = colonies_actives_ruche_invalide_ou_inactive()
+
+        self.assertTrue(any(str(colonie) in a.message for a in avertissements))
+
+    def test_colonie_active_sur_ruche_active_ne_declenche_rien(self):
+        colonie = self._creer_colonie(51)
+
+        avertissements = colonies_actives_ruche_invalide_ou_inactive()
+
+        self.assertFalse(any(str(colonie) in a.message for a in avertissements))
+
+    def test_colonie_inactive_sur_ruche_inactive_ne_declenche_rien(self):
+        type_ruche = TypeRuche.objects.get(code="DADANT10")
+        ruche = Ruche.objects.create(type_ruche=type_ruche, numero=52, actif=False)
+        colonie = self._creer_colonie(52, ruche=ruche, active=False)
+
+        avertissements = colonies_actives_ruche_invalide_ou_inactive()
+
+        self.assertFalse(any(str(colonie) in a.message for a in avertissements))
+
+    # -- Généalogie de reines chronologiquement incohérente ------------
+
+    def test_mere_nee_apres_sa_fille_declenche_avertissement(self):
+        fille = Reine.objects.create(identifiant="R-Fille", date_naissance=date(2026, 1, 1))
+        mere = Reine.objects.create(identifiant="R-Mere", date_naissance=date(2026, 2, 1))
+        fille.mere = mere
+        fille.save()
+
+        avertissements = reines_genealogie_chronologie_incoherente()
+
+        self.assertTrue(
+            any("R-Mere" in a.message and "R-Fille" in a.message for a in avertissements)
+        )
+
+    def test_mere_nee_avant_sa_fille_ne_declenche_rien(self):
+        mere = Reine.objects.create(identifiant="R-Mere2", date_naissance=date(2025, 1, 1))
+        Reine.objects.create(
+            identifiant="R-Fille2", mere=mere, date_naissance=date(2026, 1, 1),
+        )
+
+        avertissements = reines_genealogie_chronologie_incoherente()
+
+        self.assertFalse(any("R-Mere2" in a.message for a in avertissements))
+
+    def test_dates_de_naissance_manquantes_ne_declenchent_rien(self):
+        mere = Reine.objects.create(identifiant="R-Mere3")
+        Reine.objects.create(identifiant="R-Fille3", mere=mere, date_naissance=date(2026, 1, 1))
+
+        avertissements = reines_genealogie_chronologie_incoherente()
+
+        self.assertFalse(any("R-Mere3" in a.message for a in avertissements))
+
+    # -- Cellules royales à statut/reine incohérents -------------------
+
+    def test_statut_devenue_reine_sans_reine_declenche_avertissement(self):
+        cellule = self._creer_cellule_royale(200, StatutCelluleRoyale.DEVENUE_REINE)
+
+        avertissements = cellules_royales_statut_reine_incoherents()
+
+        self.assertTrue(any(cellule.mere.identifiant in a.message for a in avertissements))
+
+    def test_reine_renseignee_avec_statut_different_declenche_avertissement(self):
+        reine = Reine.objects.create(identifiant="R-Issue-CR")
+        self._creer_cellule_royale(201, StatutCelluleRoyale.EN_DEVELOPPEMENT, reine=reine)
+
+        avertissements = cellules_royales_statut_reine_incoherents()
+
+        self.assertTrue(any("R-Issue-CR" in a.message for a in avertissements))
+
+    def test_statut_devenue_reine_avec_reine_coherente_ne_declenche_rien(self):
+        reine = Reine.objects.create(identifiant="R-Coherente")
+        cellule = self._creer_cellule_royale(
+            202, StatutCelluleRoyale.DEVENUE_REINE, reine=reine,
+        )
+
+        avertissements = cellules_royales_statut_reine_incoherents()
+
+        self.assertFalse(any(cellule.mere.identifiant in a.message for a in avertissements))
+
+    # -- Mesures à score hors intervalle 1-4 ---------------------------
+
+    def test_score_hors_intervalle_declenche_avertissement(self):
+        colonie = self._creer_colonie(60)
+        mesure = Mesure.objects.create(
+            colonie=colonie, critere=CritereSelection.objects.get(code="SANTE"),
+            date_mesure="2026-05-01", valeur_brute="anormal", score=7,
+        )
+
+        avertissements = mesures_score_hors_intervalle()
+
+        self.assertTrue(any(str(mesure) in a.message for a in avertissements))
+
+    def test_score_dans_lintervalle_ne_declenche_rien(self):
+        colonie = self._creer_colonie(61)
+        mesure = Mesure.objects.create(
+            colonie=colonie, critere=CritereSelection.objects.get(code="SANTE"),
+            date_mesure="2026-05-01", valeur_brute="ras", score=3,
+        )
+
+        avertissements = mesures_score_hors_intervalle()
+
+        self.assertFalse(any(str(mesure) in a.message for a in avertissements))
+
+    def test_score_absent_ne_declenche_rien(self):
+        colonie = self._creer_colonie(62)
+        mesure = Mesure.objects.create(
+            colonie=colonie, critere=CritereSelection.objects.get(code="SANTE"),
+            date_mesure="2026-05-01", valeur_brute="ras",
+        )
+
+        avertissements = mesures_score_hors_intervalle()
+
+        self.assertFalse(any(str(mesure) in a.message for a in avertissements))
+
+
+class DiagnosticViewTests(TestCase):
+    """Tests de la vue `selection:diagnostic` (issue #32)."""
+
+    def test_page_propre_affiche_aucun_probleme(self):
+        response = self.client.get(reverse("selection:diagnostic"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Aucun problème détecté")
+        self.assertEqual(response.context["total"], 0)
+
+    def test_page_liste_les_avertissements_groupes_avec_lien_admin(self):
+        lot = LotCriteres.objects.create(nom="Lot diagnostic vue")
+
+        response = self.client.get(reverse("selection:diagnostic"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Lot diagnostic vue")
+        self.assertContains(
+            response,
+            reverse("admin:selection_lotcriteres_change", args=[lot.id]),
+        )
+        self.assertGreaterEqual(response.context["total"], 1)
+
+    def test_lien_diagnostic_present_dans_la_barre_de_liens_admin(self):
+        superuser = get_user_model().objects.create_superuser(
+            username="admin_diag", email="admin_diag@example.com", password="motdepasse",
+        )
+        self.client.force_login(superuser)
+
+        response = self.client.get(reverse("admin:index"))
+
+        self.assertContains(response, reverse("selection:diagnostic"))

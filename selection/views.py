@@ -11,6 +11,7 @@ from xhtml2pdf import pisa
 
 from .calculs import calculer_index_colonie
 from .couleurs import couleur_etape
+from .diagnostics import executer_diagnostics
 from .models import (
     CampagneElevage,
     CritereSelection,
@@ -196,6 +197,19 @@ def marquer_etape_realisee(request, etape_id):
         request, f'« {etape.get_type_etape_display()} » marqué comme fait !'
     )
     return redirect("selection:taches")
+
+
+def diagnostic(request):
+    """Mode diagnostic (issue #32) : liste, groupés par type de
+    vérification, tous les avertissements de cohérence détectés dans les
+    données actuelles. Purement consultatif — n'empêche rien, ne modifie
+    rien (cf. selection/diagnostics.py)."""
+    resultats = executer_diagnostics()
+    total = sum(len(avertissements) for _, avertissements in resultats)
+    return render(request, "selection/diagnostic.html", {
+        "resultats": resultats,
+        "total": total,
+    })
 
 
 def _campagne_selectionnee(request):
