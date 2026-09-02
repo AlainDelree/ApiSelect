@@ -12,12 +12,14 @@
         h1 { font-size: 15pt; margin-bottom: 0.3cm; }
         .entete { margin-bottom: 0.6cm; font-size: 10pt; }
         .entete p { margin: 0.1cm 0; }
-        table { width: 100%; border-collapse: collapse; }
+        table { width: 100%; table-layout: fixed; border-collapse: collapse; }
         th, td {
             border: 1px solid #000;
-            padding: 5pt 6pt;
+            padding: 4pt 5pt;
             text-align: left;
             vertical-align: top;
+            white-space: normal;
+            word-wrap: break-word;
         }
         th { background-color: #e0e0e0; }
         td.case-note { text-align: center; height: 1.1cm; white-space: nowrap; }
@@ -38,12 +40,12 @@
         <table>
             <thead>
                 <tr>
-                    <th>Colonie</th>
-                    <th>Lignée reine</th>
+                    <th style="width: 13%">Colonie</th>
+                    <th style="width: 15%">Lignée reine</th>
                     {% for critere in criteres %}
-                        <th>{{ critere.nom }}</th>
+                        <th style="width: 12%">{{ critere.nom }}</th>
                     {% endfor %}
-                    <th>Note libre</th>
+                    <th style="width: 24%">Note libre</th>
                 </tr>
             </thead>
             <tbody>

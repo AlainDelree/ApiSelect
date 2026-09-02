@@ -12,14 +12,16 @@
         h1 { font-size: 15pt; margin-bottom: 0.3cm; }
         .entete { margin-bottom: 0.6cm; font-size: 10pt; }
         .entete p { margin: 0.1cm 0; }
-        table { width: 100%; border-collapse: collapse; }
+        table { width: 100%; table-layout: fixed; border-collapse: collapse; }
         th, td {
             border: 1px solid #000;
-            padding: 5pt 6pt;
+            padding: 4pt 5pt;
             text-align: left;
             vertical-align: top;
+            white-space: normal;
+            word-wrap: break-word;
         }
-        th { background-color: #e0e0e0; }
+        th { background-color: #e0e0e0; font-size: 8pt; }
         td.valeur-brute { height: 1.1cm; }
     </style>
 </head>
@@ -36,6 +38,13 @@
             <a href="{% url 'selection:fiche_approfondie_formulaire' %}">formulaire de sélection</a>.</p>
     {% else %}
         <table>
+            <colgroup>
+                <col style="width: 15%">
+                <col style="width: 17%">
+                {% for critere in criteres %}
+                    <col style="width: 13.6%">
+                {% endfor %}
+            </colgroup>
             <thead>
                 <tr>
                     <th>Colonie</th>
