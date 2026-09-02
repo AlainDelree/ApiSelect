@@ -13,11 +13,26 @@
     }
 </style>
 {% endif %}
+<style>
+    #barre-liens-selection {
+        background: #f8f8f8; border-bottom: 1px solid #ddd;
+        text-align: center; font-size: 0.85em; padding: 0.4em;
+        color: #666;
+    }
+    #barre-liens-selection a { margin: 0 0.5em; }
+</style>
 {% endblock %}
 
 {% block header %}
 {% if BASE_DE_TEST_ACTIVE %}
 <div id="bandeau-base-test">⚠️ BASE DE TEST — données fictives</div>
 {% endif %}
+<div id="barre-liens-selection">
+    <a href="{% url 'selection:resultats' %}">Tableau de résultats de sélection</a>
+    ·
+    <a href="{% url 'selection:calendrier' %}">Calendrier d'élevage</a>
+    ·
+    <a href="{% url 'selection:taches' %}">Liste des tâches à venir</a>
+</div>
 {{ block.super }}
 {% endblock %}

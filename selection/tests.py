@@ -1196,6 +1196,34 @@ class BandeauBaseTestTests(TestCase):
         self.assertIn("BASE DE TEST", html_genere)
 
 
+class LiensSelectionToutesPagesAdminTests(TestCase):
+    """Les liens vers les vues personnalisées (résultats, calendrier,
+    tâches) doivent être visibles depuis n'importe quelle page de
+    l'admin, pas seulement la page d'accueil (issue #26)."""
+
+    def setUp(self):
+        self.superuser = get_user_model().objects.create_superuser(
+            username="admin", email="admin@example.com", password="motdepasse",
+        )
+        self.client.force_login(self.superuser)
+
+    def test_liens_presents_sur_une_page_admin_autre_que_laccueil(self):
+        response = self.client.get(
+            reverse("admin:selection_etapecalendrier_changelist")
+        )
+
+        self.assertContains(response, reverse("selection:resultats"))
+        self.assertContains(response, reverse("selection:calendrier"))
+        self.assertContains(response, reverse("selection:taches"))
+
+    def test_liens_presents_une_seule_fois_sur_laccueil(self):
+        response = self.client.get(reverse("admin:index"))
+
+        self.assertContains(response, reverse("selection:resultats"), count=1)
+        self.assertContains(response, reverse("selection:calendrier"), count=1)
+        self.assertContains(response, reverse("selection:taches"), count=1)
+
+
 class PeuplerDonneesTestCommandTests(TestCase):
     """Vérifie que `peupler_donnees_test` crée bien le jeu de données
     fictif attendu (issue #12) : rucher/reines/colonies préfixées TEST-,
