@@ -149,6 +149,11 @@ class ModeAcquisitionReine(models.TextChoices):
     ACHETEE_CR = "ACHETEE_CR", "Achetée en cellule royale"
     ACHETEE_VIERGE = "ACHETEE_VIERGE", "Achetée vierge"
     ACHETEE_FECONDEE = "ACHETEE_FECONDEE", "Achetée fécondée"
+    ARRIVEE_ESSAIM = "ARRIVEE_ESSAIM", "Arrivée avec un essaim"
+    REMERAGE_NATUREL = (
+        "REMERAGE_NATUREL",
+        "Remérage naturel (par la colonie elle-même)",
+    )
 
 
 class Reine(models.Model):
@@ -231,7 +236,12 @@ class Colonie(models.Model):
     mode_creation = models.CharField(
         max_length=20, choices=ModeCreationColonie.choices,
     )
-    date_creation = models.DateField()
+    date_creation = models.DateField(
+        null=True, blank=True,
+        help_text="Laisser vide si la date exacte est inconnue (colonie "
+                   "déjà existante avant la reprise de l'élevage, issue "
+                   "#29).",
+    )
     active = models.BooleanField(
         default=True,
         help_text="Décoché si la colonie n'existe plus (mortalité, "
