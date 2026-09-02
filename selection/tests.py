@@ -3,6 +3,7 @@ from decimal import Decimal
 from unittest import mock
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import connection
@@ -1580,3 +1581,40 @@ class NouveauxModesAcquisitionReineTests(TestCase):
             reine.get_mode_acquisition_display(),
             "Remérage naturel (par la colonie elle-même)",
         )
+
+
+class MesureCampagneObligatoireTests(TestCase):
+    """`Mesure.campagne` est désormais obligatoire (issue #31) : une mesure
+    sans campagne restait invisible dans le tableau de résultats, qui
+    filtre par campagne — source d'erreur silencieuse difficile à
+    diagnostiquer."""
+
+    def setUp(self):
+        type_ruche = TypeRuche.objects.get(code="DADANT10")
+        ruche = Ruche.objects.create(type_ruche=type_ruche, numero=1)
+        self.colonie = Colonie.objects.create(
+            ruche=ruche, mode_creation="ACHAT", date_creation="2026-01-01",
+            active=True,
+        )
+        self.critere = CritereSelection.objects.get(code="SANTE")
+
+    def test_mesure_sans_campagne_rejetee_a_la_validation(self):
+        mesure = Mesure(
+            colonie=self.colonie, critere=self.critere,
+            date_mesure="2026-05-01", valeur_brute="bonne santé",
+        )
+
+        with self.assertRaises(ValidationError):
+            mesure.full_clean()
+
+    def test_mesure_avec_campagne_valide(self):
+        lot_criteres = LotCriteres.objects.create(nom="Lot 2026")
+        campagne = CampagneElevage.objects.create(
+            nom="Campagne 2026", annee=2026, lot_criteres=lot_criteres,
+        )
+        mesure = Mesure(
+            colonie=self.colonie, critere=self.critere, campagne=campagne,
+            date_mesure="2026-05-01", valeur_brute="bonne santé",
+        )
+
+        mesure.full_clean()
