@@ -5,3 +5,4 @@ __pycache__/
 .env
 Cours_Apiculture/
 update_descriptions_criteres.sql
+.venv_test/
