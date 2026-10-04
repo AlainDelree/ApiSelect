@@ -34,8 +34,8 @@ class RucherAdmin(admin.ModelAdmin):
 
 @admin.register(TypeRuche)
 class TypeRucheAdmin(admin.ModelAdmin):
-    list_display = ["nom", "code", "alias", "numerotation_permanente", "nombre_cadres"]
-    list_editable = ["alias", "nombre_cadres"]
+    list_display = ["nom", "code", "alias", "numerotation_permanente", "nombre_cadres", "hauteur_relative_pourcent"]
+    list_editable = ["alias", "nombre_cadres", "hauteur_relative_pourcent"]
     search_fields = ["nom", "code", "alias"]
 
 

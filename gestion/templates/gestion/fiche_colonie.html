@@ -16,7 +16,7 @@
 
     {% with bande=colonie.ruche|bande_ruche %}
     <div class="tuile-bande fiche-bande" role="img" aria-label="{{ bande.libelle }}" style="--couleur-ruche: {{ bande.couleur }};">
-        <div class="tuile-bande-couleur" style="left: {{ bande.marge_pourcent }}%; width: {{ bande.largeur_pourcent }}%;"></div>
+        <div class="tuile-bande-couleur" style="left: {{ bande.marge_pourcent }}%; width: {{ bande.largeur_pourcent }}%; top: {{ bande.marge_verticale_pourcent }}%; bottom: {{ bande.marge_verticale_pourcent }}%;"></div>
     </div>
     {% endwith %}
 

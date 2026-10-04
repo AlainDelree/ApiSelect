@@ -9,6 +9,12 @@ réparties à parts égales ; pleine largeur si le nombre de cadres est
 inconnu ou atteint 10 (une ruchette 6 cadres est donc plus étroite
 qu'une Dadant 10, pas l'inverse).
 
+Hauteur : proportionnelle à `TypeRuche.hauteur_relative_pourcent`
+(issue #49), centrée entre deux bandes blanches réparties à parts
+égales ; hauteur complète si vide, 0 ou 100 — pour les boîtes
+visuellement plus petites (ex. Apidea). Le cadre de la bande (hauteur
+totale, bordure) ne change jamais ; seule la zone colorée rétrécit.
+
 Ne dépend que de `Ruche`/`TypeRuche` (lus, pas modifiés) — même
 exception à la dépendance à sens unique vers `selection` que
 `gestion.views` (cf. CONTEXTE.md), aucun SQL spécifique à PostgreSQL.
@@ -17,6 +23,7 @@ exception à la dépendance à sens unique vers `selection` que
 import colorsys
 
 CADRES_PLEINE_LARGEUR = 10
+HAUTEUR_PLEINE_POURCENT = 100
 COULEUR_GRISE_PAR_DEFAUT = "#9e9e9e"
 
 # Bornes supérieures de teinte (en degrés, 0-360) associées à un nom de
@@ -71,6 +78,14 @@ def bande_ruche(ruche):
         largeur_pourcent = nombre_cadres * 10
         marge_pourcent = (100 - largeur_pourcent) // 2
 
+    hauteur_relative = ruche.type_ruche.hauteur_relative_pourcent
+    if not hauteur_relative or hauteur_relative >= HAUTEUR_PLEINE_POURCENT:
+        hauteur_pourcent = 100
+        marge_verticale_pourcent = 0
+    else:
+        hauteur_pourcent = hauteur_relative
+        marge_verticale_pourcent = (100 - hauteur_pourcent) // 2
+
     fragments = [ruche.type_ruche.libelle_affichage]
     if nombre_cadres:
         pluriel = "s" if nombre_cadres != 1 else ""
@@ -81,5 +96,7 @@ def bande_ruche(ruche):
         "couleur": couleur,
         "largeur_pourcent": largeur_pourcent,
         "marge_pourcent": marge_pourcent,
+        "hauteur_pourcent": hauteur_pourcent,
+        "marge_verticale_pourcent": marge_verticale_pourcent,
         "libelle": libelle,
     }

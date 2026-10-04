@@ -63,6 +63,14 @@ class TypeRuche(models.Model):
                    "fiche colonie s'affiche alors pleine largeur — la "
                    "valeur n'est jamais déduite du nom du type (issue #47).",
     )
+    hauteur_relative_pourcent = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        validators=[MinValueValidator(10), MaxValueValidator(100)],
+        help_text="Hauteur relative (%) de la bande de couleur, de 10 à "
+                   "100, pour les types de boîte visuellement plus petits "
+                   "(ex. Apidea). Laisser vide, ou mettre 100, pour la "
+                   "hauteur complète actuelle (issue #49).",
+    )
 
     class Meta:
         verbose_name = "Type de ruche"

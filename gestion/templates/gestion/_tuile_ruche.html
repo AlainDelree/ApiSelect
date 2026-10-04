@@ -4,7 +4,7 @@
 {% else %}<div class="tuile tuile-vide" style="--couleur-ruche: {{ bande.couleur }};">
 {% endif %}
     <div class="tuile-bande" role="img" aria-label="{{ bande.libelle }}">
-        <div class="tuile-bande-couleur" style="left: {{ bande.marge_pourcent }}%; width: {{ bande.largeur_pourcent }}%;"></div>
+        <div class="tuile-bande-couleur" style="left: {{ bande.marge_pourcent }}%; width: {{ bande.largeur_pourcent }}%; top: {{ bande.marge_verticale_pourcent }}%; bottom: {{ bande.marge_verticale_pourcent }}%;"></div>
     </div>
     <div class="tuile-corps">
         <p class="tuile-titre">{{ ruche.type_ruche.libelle_affichage }} {{ ruche.numero }}</p>

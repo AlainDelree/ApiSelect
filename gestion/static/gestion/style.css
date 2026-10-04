@@ -102,8 +102,6 @@ a.tuile:hover {
 
 .tuile-bande-couleur {
     position: absolute;
-    top: 0;
-    bottom: 0;
     background: var(--couleur-ruche, var(--couleur-neutre));
 }
 

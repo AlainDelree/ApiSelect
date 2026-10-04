@@ -246,6 +246,125 @@ class BandeRucheTests(TestCase):
         self.assertContains(reponse, "left: 20%")
 
 
+class BandeRucheHauteurTests(TestCase):
+    """Hauteur relative de la bande (issue #49) : zone colorée centrée
+    verticalement, bandes blanches hautes/basses égales — pour les
+    boîtes visuellement plus petites (ex. Apidea). Comportement
+    inchangé si la hauteur relative est vide ou à 100."""
+
+    def setUp(self):
+        self.rucher = Rucher.objects.create(nom="Rucher bandes hauteur")
+        self.type_dadant = TypeRuche.objects.get(code="DADANT10")
+        self.type_ruchette = TypeRuche.objects.get(code="RUCHETTE6")
+
+    def test_hauteur_vide_bande_pleine_hauteur(self):
+        # hauteur_relative_pourcent reste vide : comportement par défaut
+        # juste après la migration additive.
+        ruche = Ruche.objects.create(
+            type_ruche=self.type_dadant, numero=201, rucher=self.rucher,
+            couleur="#3f8f3f",
+        )
+
+        bande = bande_ruche(ruche)
+
+        self.assertEqual(bande["hauteur_pourcent"], 100)
+        self.assertEqual(bande["marge_verticale_pourcent"], 0)
+
+    def test_hauteur_cent_bande_pleine_hauteur(self):
+        self.type_dadant.hauteur_relative_pourcent = 100
+        self.type_dadant.save()
+        ruche = Ruche.objects.create(
+            type_ruche=self.type_dadant, numero=202, rucher=self.rucher,
+            couleur="#3f8f3f",
+        )
+
+        bande = bande_ruche(ruche)
+
+        self.assertEqual(bande["hauteur_pourcent"], 100)
+        self.assertEqual(bande["marge_verticale_pourcent"], 0)
+
+    def test_hauteur_cinquante_centree(self):
+        self.type_dadant.hauteur_relative_pourcent = 50
+        self.type_dadant.save()
+        ruche = Ruche.objects.create(
+            type_ruche=self.type_dadant, numero=203, rucher=self.rucher,
+            couleur="#3f8f3f",
+        )
+
+        bande = bande_ruche(ruche)
+
+        self.assertEqual(bande["hauteur_pourcent"], 50)
+        self.assertEqual(bande["marge_verticale_pourcent"], 25)
+        # Les deux bandes blanches (haut et bas) sont égales.
+        self.assertEqual(
+            bande["marge_verticale_pourcent"] * 2 + bande["hauteur_pourcent"], 100
+        )
+
+    def test_largeur_et_hauteur_combinees(self):
+        self.type_ruchette.nombre_cadres = 5
+        self.type_ruchette.hauteur_relative_pourcent = 50
+        self.type_ruchette.save()
+        ruche = Ruche.objects.create(
+            type_ruche=self.type_ruchette, numero=204, rucher=self.rucher,
+            couleur="#1e88e5",
+        )
+
+        bande = bande_ruche(ruche)
+
+        self.assertEqual(bande["largeur_pourcent"], 50)
+        self.assertEqual(bande["marge_pourcent"], 25)
+        self.assertEqual(bande["hauteur_pourcent"], 50)
+        self.assertEqual(bande["marge_verticale_pourcent"], 25)
+
+    def test_bande_hauteur_affichee_sur_la_tuile_accueil(self):
+        self.type_dadant.hauteur_relative_pourcent = 50
+        self.type_dadant.save()
+        ruche = Ruche.objects.create(
+            type_ruche=self.type_dadant, numero=205, rucher=self.rucher,
+            couleur="#3f8f3f",
+        )
+        Colonie.objects.create(
+            ruche=ruche, mode_creation=ModeCreationColonie.ACHAT, active=True,
+        )
+
+        reponse = self.client.get(reverse("gestion:accueil"))
+
+        self.assertContains(reponse, "top: 25%")
+        self.assertContains(reponse, "bottom: 25%")
+
+    def test_fiche_colonie_affiche_la_meme_hauteur(self):
+        self.type_dadant.hauteur_relative_pourcent = 50
+        self.type_dadant.save()
+        ruche = Ruche.objects.create(
+            type_ruche=self.type_dadant, numero=206, rucher=self.rucher,
+            couleur="#3f8f3f",
+        )
+        colonie = Colonie.objects.create(
+            ruche=ruche, mode_creation=ModeCreationColonie.ACHAT, active=True,
+        )
+
+        reponse = self.client.get(
+            reverse("gestion:fiche_colonie", args=[colonie.id])
+        )
+
+        self.assertContains(reponse, "fiche-bande")
+        self.assertContains(reponse, "top: 25%")
+        self.assertContains(reponse, "bottom: 25%")
+
+    def test_ruche_sans_colonie_active_toujours_marquee_vide(self):
+        self.type_dadant.hauteur_relative_pourcent = 50
+        self.type_dadant.save()
+        Ruche.objects.create(
+            type_ruche=self.type_dadant, numero=207, rucher=self.rucher,
+            couleur="#3f8f3f",
+        )
+
+        reponse = self.client.get(reverse("gestion:accueil"))
+
+        self.assertContains(reponse, "Vide")
+        self.assertContains(reponse, "tuile-vide")
+
+
 class FicheColonieTests(TestCase):
     """Fiche colonie en lecture seule (issue #41) : ruche, rucher, reine,
     configuration actuelle, historique des événements."""
