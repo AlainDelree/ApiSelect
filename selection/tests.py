@@ -1245,6 +1245,18 @@ class LiensSelectionToutesPagesAdminTests(TestCase):
         self.assertContains(response, reverse("selection:calendrier"), count=1)
         self.assertContains(response, reverse("selection:taches"), count=1)
 
+    def test_liens_fiches_pdf_presents_sur_laccueil(self):
+        """Issue #36 : la barre de liens propose aussi les fiches de
+        terrain PDF (rapide et approfondie)."""
+        response = self.client.get(reverse("admin:index"))
+
+        self.assertContains(response, reverse("selection:fiche_rapide"), count=1)
+        self.assertContains(
+            response,
+            reverse("selection:fiche_approfondie_formulaire"),
+            count=1,
+        )
+
 
 class PeuplerDonneesTestCommandTests(TestCase):
     """Vérifie que `peupler_donnees_test` crée bien le jeu de données
