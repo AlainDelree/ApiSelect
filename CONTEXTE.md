@@ -1,81 +1,74 @@
 # Contexte projet — ApiSelect (sélection génétique par élevage de reines)
 
+## ⚠️ Règles de travail (prioritaires)
+- **Données : jamais de suppression/modification sur `apiselect` ou
+  `apiselect_dev` sans accord explicite d'Alain** (données réelles
+  saisies pendant les tests). Interdits sans accord : `flush`,
+  `dropdb`, `loaddata`, DELETE/TRUNCATE, `purgetest`,
+  `purger_donnees_test`/`reinitialiser_donnees_test`/
+  `peupler_donnees_test` (et leur modification). Données `TEST-`/
+  « Rucher Test » incluses (appartiennent à ces commandes).
+- Jamais de `migrate` sur `apiselect` : Alain s'en charge.
+- Tests : uniquement `python manage.py test selection`.
+- Aucun `git push` : Alain pousse après relecture.
+
 ## Objectif / Stack
-Outil de gestion d'un rucher orienté élevage de reines et sélection
-sur critères mesurables. Usage bureau (saisie le soir, pas mobile/
-terrain, propolis/gants). Utilisateur unique. Python/Django,
-PostgreSQL, admin Django (saisie par lot), xhtml2pdf (PDF, pure
-Python — portable Linux/Windows sans dépendance système, préféré à
-WeasyPrint pour cette raison), calendrier (FullCalendar ou vue custom).
+Gestion d'un rucher orienté élevage de reines, sélection sur critères
+mesurables. Usage bureau, utilisateur unique. Python/Django, PostgreSQL
+(`apiselect` = réelle, `apiselect_dev` = test), admin Django,
+xhtml2pdf (PDF pur Python).
 
-## Vocabulaire — distinctions du modèle
-(l'utilisateur mélange ces termes à l'oral ; la rigueur vient du code)
-- **Rucher** : emplacement géographique.
-- **Ruche** : boîte physique. Type + numéro = identité (numéro cloué
-  sur la boîte). Types en table (TypeRuche + alias) : Dadant 10/
-  "Ruche", Ruchette 6/"Ruchette", Apidea, DH. Affichage : alias +
-  numéro sans "n°" (ex. "Ruche 3"). Apidea/DH : numéro réutilisable,
-  pas d'identité permanente sur les planches.
-- **Colonie** : population vivante à un instant donné, liée à une
-  ruche. Mode de création : achat/essaimage naturel/artificiel/
-  fusion-réunion/origine inconnue (indépendant de l'origine de la
-  reine actuelle, ex. reine achetée dans une colonie issue de fusion).
-  Historique de configuration (corps + hausses) et de déménagement/
-  remérage à tracer.
-- **Reine** : identité généalogique réelle, indépendante de la boîte.
-  Liée à sa mère, lignée mâle probable (fécondation en vol =
-  probabiliste), station de fécondation, marquage couleur/année.
-- Cadres "corps"/"hausse" (2 hausse = 1 corps en hauteur),
-  interchangeables Dadant/ruchette selon la hauteur, pas la largeur.
-- Hors scope : inventaire matériel/consommables, suivi varroa,
-  entretien/peinture. Piste future (non conçue) : vocabulaire
-  configurable si l'outil est partagé (ex. "Ruche" = boîte pour
-  certains, = colonie pour d'autres).
-- **Principe** : l'alias est un habillage d'affichage, jamais un
-  identifiant fonctionnel — recherche/liens/actions utilisent
-  toujours les champs structurés (type+numéro, id).
+## Vocabulaire (la rigueur vient du code, pas de l'oral)
+**Rucher** = emplacement. **Ruche** = boîte physique (type+numéro =
+identité ; Apidea/DH : numéro réutilisable). **Colonie** = population
+vivante liée à une ruche (mode de création, historique config +
+événements séparé). **Reine** = identité généalogique indépendante de
+la boîte (mère, lignée mâle probable, station de fécondation, statut
+vierge/fécondée, mode d'acquisition : élevée / achetée en CR, vierge
+ou fécondée / arrivée avec essaim / remérage naturel — issue #29).
+**CelluleRoyale** = tentative individuelle d'élevage (cf. plus bas).
+Alias = habillage d'affichage seulement ; recherche/liens sur champs
+structurés (id, type+numéro).
 
-## Documents de référence (locaux, non versionnés)
-`Cours_Apiculture/`, gitignoré (droits d'auteur, dépôt public) :
-- `Elevage de reine.pdf` — cours (Maranzan/CRISAB), barème détaillé.
-- `calendrier élevage de reine.ods` — logique de dates en cascade
-  d'origine, base du module calendrier.
-Ne jamais committer ni référencer dans une issue.
+## Documents de référence
+`Cours_Apiculture/` (gitignoré) : barème + calendrier source. Jamais
+committé ni référencé dans une issue.
 
 ## Sélection génétique
-9 critères du cours, deux passes : **rapide** (toutes colonies) santé/
-propreté/agressivité/tenue au cadre ; **approfondie** (colonies
-pressenties) nettoyage/récolte/couvain/miel/pollen. Score 1-4 selon
-barème du cours (`Cours_Apiculture/Elevage de reine.pdf`, non
-versionné). Poids 0-10 par campagne (historisé). Seuils éliminatoires
-optionnels. Index = Σ(score×poids)/Σ(poids). Tableau trié par index.
+9 critères (rapide : santé/propreté/agressivité/tenue au cadre ;
+approfondie : nettoyage/récolte/couvain/miel/pollen), score 1-4,
+fiches PDF. `LotCriteres` = lot nommé réutilisable de poids (0-10)/seuils
+éliminatoires, **indépendant des campagnes** (`CampagneElevage.
+lot_criteres`, partageable ; nouvelle stratégie = nouveau lot, jamais
+modifier l'existant). Index = Σ(score×poids)/Σ(poids).
+`Mesure.campagne` **obligatoire** (issue #31, sinon mesure invisible du
+tableau de résultats).
 
 ## Calendrier d'élevage
-Cascade de dates reflétant la méthode réelle d'Alain (issue #14, révise
-l'issue #7 qui avait été calquée à tort sur le cours générique) : pas de
-starter séparé (greffage direct dans une ruche orpheline qui élève les
-cellules royales jusqu'à operculation et au-delà), pas de couveuse (les
-cellules restent sur la colonie orpheline), distribution directe dans
-les Apidea (pas de ruchettes), pas de libération ni de contrôle des
-naissances séparés. Ponte = jour 0 : mâles -16j (facultatif, activé par
-campagne — pas encore pratiqué avec le nombre de ruches actuel), picking
-+4j, ruche orpheline +4j, garnir les Apidea +14j, contrôle ponte et pose
-de la grille anti-essaimage +25j. Multi-campagnes en parallèle. Vue
-calendrier mensuel + liste de tâches. La constitution des Apidea
-eux-mêmes (peuplement, confinement) n'a pas de date fixe par campagne et
-n'est pas modélisée dans cette cascade.
+4 étapes en cascade (méthode réelle d'Alain, issues #14/#25 : pas de
+starter/couveuse séparés, distribution directe en Apidea). Ponte =
+jour 0 → **Orphelinage** (règle des 9j), **Picking** +4j (greffage),
+**Garnir les Apidea** +14j, **Contrôle ponte et grille** +25j. Étape
+facultative **Élevage des mâles** (-16j, activée par campagne via
+`elevage_males_actif`, pas encore pratiquée). Multi-campagnes en
+parallèle. Suivi individuel de chaque cellule royale (plusieurs par
+ruche orpheline) dans `CelluleRoyale` (issue #25), pas en étape
+agrégée : trace une tentative (mère greffée, ruche orpheline, Apidea
+destination, statut En développement/Devenue reine/Morte avant
+éclosion/Perdue), ne disparaît jamais en échec (permet
+`CampagneElevage.taux_reussite`). Lien vers `Reine` renseigné
+**seulement si Devenue reine** (admin « Confirmer éclosion »).
 
-## Fiches de terrain
-Fiche rapide (colonies actives, 4 critères passe rapide, cases 1-4 à
-entourer) et fiche approfondie (colonies choisies via formulaire, 5
-critères, valeur brute à noter). xhtml2pdf.
+## Mode diagnostic (issue #32)
+Page `/diagnostic/` : vérifications de cohérence consultatives
+(n'empêchent jamais la saisie), ex. campagne active sans
+`lot_criteres`. Vérification = fonction indépendante dans
+`selection/diagnostics.py`, listée dans `VERIFICATIONS`.
 
-## État d'avancement
-Conception initiale complète : modèle de données, 3 vues PostgreSQL,
-TypeRuche en table (alias éditables), 9 critères peuplés, index
-pondéré testé, tableau de résultats, calendrier multi-campagnes,
-fiches PDF. Commande globale `apiselect` (lance serveur + navigateur
-sur /admin/). Auto-complétion année seule → 01/04/AAAA sur
-date_naissance (Reine). Saisie réelle en cours : 2 ruchers (Bovesse,
-Anhée), reines A24 et Beelgium_Blanche créées, colonies en cours de
-complétion (numéros de ruche à confirmer sur site).
+## État des migrations et d'avancement
+Migrations 0010-0015 (lots de critères, vue mesures complètes, poids
+0-10, retrait nombre_cr, date_creation Colonie optionnelle,
+Mesure.campagne obligatoire) appliquées sur `apiselect_dev`. **En
+attente sur `apiselect`** (vraie base), à appliquer par Alain
+lui-même. Saisie réelle en cours : 2 ruchers (Bovesse, Anhée). Alain
+reprend le projet après une pause d'un mois.
