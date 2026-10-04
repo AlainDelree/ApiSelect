@@ -30,9 +30,12 @@ NOMS_MOIS = {
 NOMS_JOURS_SEMAINE = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
 
 
-def resultats_selection(request):
-    """Tableau des colonies actives d'une campagne, triées par index de
-    sélection décroissant, avec le détail des 9 critères en colonnes.
+def _contexte_resultats(request):
+    """Contexte du tableau de résultats (colonies actives d'une campagne,
+    triées par index de sélection décroissant, avec le détail des 9
+    critères en colonnes) — partagé entre la page `selection:resultats`
+    et la page d'accueil de l'admin (issue #38) pour ne pas dupliquer ce
+    calcul.
 
     Campagne par défaut : la plus récente selon l'ordering du modèle
     (année décroissante, puis nom) — cf. rapport de clôture pour
@@ -41,12 +44,12 @@ def resultats_selection(request):
     campagnes = CampagneElevage.objects.all()
 
     if not campagnes.exists():
-        return render(request, "selection/resultats.html", {
+        return {
             "campagnes": campagnes,
             "campagne_selectionnee": None,
             "criteres": [],
             "lignes": [],
-        })
+        }
 
     campagne_id = request.GET.get("campagne")
     if campagne_id:
@@ -80,12 +83,34 @@ def resultats_selection(request):
         -ligne["resultat"].index if ligne["resultat"].index is not None else 0,
     ))
 
-    return render(request, "selection/resultats.html", {
+    return {
         "campagnes": campagnes,
         "campagne_selectionnee": campagne_selectionnee,
         "criteres": criteres,
         "lignes": lignes,
-    })
+    }
+
+
+def resultats_selection(request):
+    """Page à part affichant le tableau de résultats (cf.
+    `_contexte_resultats`), conservée pour ne pas casser ses tests ni
+    ses liens existants (issue #38 : la page d'accueil de l'admin
+    affiche désormais le même tableau, via le même gabarit partiel)."""
+    return render(request, "selection/resultats.html", _contexte_resultats(request))
+
+
+def admin_index_avec_tableau(request, extra_context=None):
+    """Remplace `admin.site.index` (câblé directement dans
+    `apiselect/urls.py`, cf. issue #38) pour y ajouter le tableau de
+    résultats de sélection. Monkeypatcher `admin.site` ou le sous-classer
+    aurait forcé à réenregistrer tous les modèles déjà inscrits via
+    `@admin.register` sur le site par défaut — interception au niveau de
+    l'URL, plus simple."""
+    from django.contrib import admin
+
+    extra_context = extra_context or {}
+    extra_context.update(_contexte_resultats(request))
+    return admin.site.index(request, extra_context)
 
 
 def calendrier_elevage(request):
