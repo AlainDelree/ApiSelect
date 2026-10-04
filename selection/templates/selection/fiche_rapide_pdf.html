@@ -22,6 +22,7 @@
             word-wrap: break-word;
         }
         th { background-color: #e0e0e0; }
+        th.col-critere { font-size: 8pt; }
         td.case-note { text-align: center; height: 1.3cm; white-space: nowrap; }
         td.note-libre { height: 1.3cm; }
         /* Largeur de chaque colonne définie explicitement sur CHAQUE cellule
@@ -29,11 +30,18 @@
            la largeur d'une colonne à partir de chaque <td> rencontrée, et
            écrase celle du th dès qu'une cellule de donnée n'a aucun contenu
            (ex. la case "Note libre" vide) en la réduisant au seul padding —
-           d'où la colonne écrasée malgré un width défini sur le th seul. */
-        .col-colonie { width: 22%; }
+           d'où la colonne écrasée malgré un width défini sur le th seul.
+           Répartition issue #44 : Colonie au minimum nécessaire pour que
+           "Colonie"/"Ruche 12" ne passe pas à la ligne (12%, quitte à
+           monter à 14% au plus), Lignée 10%, les 4 critères juste assez
+           larges pour entourer un chiffre de 1 à 4 (11% chacun, police
+           réduite plutôt qu'élargis si un en-tête comme "Agressivité" est
+           coupé), le reste à Note libre (seul usage réel : écrire à la
+           main). */
+        .col-colonie { width: 12%; }
         .col-lignee { width: 10%; }
-        .col-critere { width: 15%; }
-        .col-note-libre { width: 8%; }
+        .col-critere { width: 11%; }
+        .col-note-libre { width: 34%; }
     </style>
 </head>
 <body>
@@ -51,9 +59,9 @@
             <thead>
                 <tr>
                     <th class="col-colonie">Colonie</th>
-                    <th class="col-lignee">Lignée reine</th>
+                    <th class="col-lignee">Lignée</th>
                     {% for critere in criteres %}
-                        <th class="col-critere">{{ critere.nom }}</th>
+                        <th class="col-critere">{{ critere.titre_pdf }}</th>
                     {% endfor %}
                     <th class="col-note-libre">Note libre</th>
                 </tr>
@@ -62,7 +70,7 @@
                 {% for ligne in lignes %}
                     <tr>
                         <td class="col-colonie">{{ ligne.colonie.ruche_identifiant }}</td>
-                        <td class="col-lignee">{{ ligne.lignee|default:"—" }}</td>
+                        <td class="col-lignee">{{ ligne.lignee }}</td>
                         {% for critere in criteres %}
                             <td class="col-critere case-note">1&nbsp;&nbsp;2&nbsp;&nbsp;3&nbsp;&nbsp;4</td>
                         {% endfor %}

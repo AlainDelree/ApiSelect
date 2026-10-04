@@ -22,6 +22,24 @@ from .models import (
     VueMesureComplete,
 )
 
+TITRES_COURTS_CRITERES_PDF = {
+    # Titres volontairement raccourcis pour les fiches de terrain PDF
+    # (place limitée sur la fiche rapide, cf. issue #44) — n'affecte ni
+    # CritereSelection.nom en base ni les autres écrans (admin, tableau de
+    # résultats). Un critère absent de ce dict garde son nom complet.
+    "TENUE_CADRE": "Tenue",
+}
+
+
+def _annoter_titres_pdf(criteres):
+    """Ajoute à chaque critère l'attribut `titre_pdf` (nom complet, sauf
+    correspondance connue dans TITRES_COURTS_CRITERES_PDF) utilisé par les
+    gabarits des fiches PDF."""
+    for critere in criteres:
+        critere.titre_pdf = TITRES_COURTS_CRITERES_PDF.get(critere.code, critere.nom)
+    return criteres
+
+
 NOMS_MOIS = {
     1: "Janvier", 2: "Février", 3: "Mars", 4: "Avril", 5: "Mai", 6: "Juin",
     7: "Juillet", 8: "Août", 9: "Septembre", 10: "Octobre", 11: "Novembre",
@@ -284,7 +302,9 @@ def fiche_rapide_pdf(request):
     gants + propolis), colonne « note libre » finale.
     """
     campagne = _campagne_selectionnee(request)
-    criteres = list(CritereSelection.objects.filter(type_mesure=TypeMesure.PASSE_RAPIDE))
+    criteres = _annoter_titres_pdf(
+        list(CritereSelection.objects.filter(type_mesure=TypeMesure.PASSE_RAPIDE))
+    )
     colonies = list(VueColonieActive.objects.all())
     lignees = _lignees_par_reine(colonies)
 
@@ -327,7 +347,9 @@ def fiche_approfondie_pdf(request):
     mesure physique convertie ensuite (cf. CONTEXTE.md)."""
     campagne = _campagne_selectionnee(request)
     colonie_ids = request.POST.getlist("colonies") or request.GET.getlist("colonies")
-    criteres = list(CritereSelection.objects.filter(type_mesure=TypeMesure.PASSE_APPROFONDIE))
+    criteres = _annoter_titres_pdf(
+        list(CritereSelection.objects.filter(type_mesure=TypeMesure.PASSE_APPROFONDIE))
+    )
     colonies = list(VueColonieActive.objects.filter(colonie_id__in=colonie_ids))
     lignees = _lignees_par_reine(colonies)
 
