@@ -1770,9 +1770,13 @@ class DiagnosticsTests(TestCase):
 
     def test_score_hors_intervalle_declenche_avertissement(self):
         colonie = self._creer_colonie(60)
+        lot_criteres = LotCriteres.objects.create(nom="Lot diag 60")
+        campagne = CampagneElevage.objects.create(
+            nom="Campagne diag 60", annee=2026, lot_criteres=lot_criteres,
+        )
         mesure = Mesure.objects.create(
             colonie=colonie, critere=CritereSelection.objects.get(code="SANTE"),
-            date_mesure="2026-05-01", valeur_brute="anormal", score=7,
+            campagne=campagne, date_mesure="2026-05-01", valeur_brute="anormal", score=7,
         )
 
         avertissements = mesures_score_hors_intervalle()
@@ -1781,9 +1785,13 @@ class DiagnosticsTests(TestCase):
 
     def test_score_dans_lintervalle_ne_declenche_rien(self):
         colonie = self._creer_colonie(61)
+        lot_criteres = LotCriteres.objects.create(nom="Lot diag 61")
+        campagne = CampagneElevage.objects.create(
+            nom="Campagne diag 61", annee=2026, lot_criteres=lot_criteres,
+        )
         mesure = Mesure.objects.create(
             colonie=colonie, critere=CritereSelection.objects.get(code="SANTE"),
-            date_mesure="2026-05-01", valeur_brute="ras", score=3,
+            campagne=campagne, date_mesure="2026-05-01", valeur_brute="ras", score=3,
         )
 
         avertissements = mesures_score_hors_intervalle()
@@ -1792,9 +1800,13 @@ class DiagnosticsTests(TestCase):
 
     def test_score_absent_ne_declenche_rien(self):
         colonie = self._creer_colonie(62)
+        lot_criteres = LotCriteres.objects.create(nom="Lot diag 62")
+        campagne = CampagneElevage.objects.create(
+            nom="Campagne diag 62", annee=2026, lot_criteres=lot_criteres,
+        )
         mesure = Mesure.objects.create(
             colonie=colonie, critere=CritereSelection.objects.get(code="SANTE"),
-            date_mesure="2026-05-01", valeur_brute="ras",
+            campagne=campagne, date_mesure="2026-05-01", valeur_brute="ras",
         )
 
         avertissements = mesures_score_hors_intervalle()
