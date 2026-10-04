@@ -1111,6 +1111,22 @@ class FichesTerrainPdfTests(TestCase):
         self.assertEqual(codes, codes_attendus)
         self.assertEqual(len(codes_attendus), 5)
 
+    def test_fiche_approfondie_generee_en_paysage(self):
+        # Issue #37 : les 5 colonnes de mesure ont besoin de la largeur
+        # supplémentaire du mode paysage pour rester lisibles et
+        # utilisables à la main.
+        colonie = self._creer_colonie(1)
+
+        with mock.patch("selection.views.pisa.CreatePDF") as creer_pdf_mock:
+            creer_pdf_mock.return_value = mock.Mock(err=False)
+            self.client.post(
+                reverse("selection:fiche_approfondie_pdf"),
+                {"campagne": self.campagne.id, "colonies": [colonie.id]},
+            )
+
+        html_genere = creer_pdf_mock.call_args.args[0]
+        self.assertIn("landscape", html_genere)
+
 
 class ReineAdminAutocompletionAnneeTests(TestCase):
     """Le formulaire admin de Reine charge le script JS d'auto-complétion

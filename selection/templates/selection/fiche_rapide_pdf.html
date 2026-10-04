@@ -22,12 +22,22 @@
             word-wrap: break-word;
         }
         th { background-color: #e0e0e0; }
-        td.case-note { text-align: center; height: 1.1cm; white-space: nowrap; }
-        td.note-libre { height: 1.1cm; }
+        td.case-note { text-align: center; height: 1.3cm; white-space: nowrap; }
+        td.note-libre { height: 1.3cm; }
+        /* Largeur de chaque colonne définie explicitement sur CHAQUE cellule
+           (th et td, pas seulement l'en-tête) : xhtml2pdf (0.2.17) recalcule
+           la largeur d'une colonne à partir de chaque <td> rencontrée, et
+           écrase celle du th dès qu'une cellule de donnée n'a aucun contenu
+           (ex. la case "Note libre" vide) en la réduisant au seul padding —
+           d'où la colonne écrasée malgré un width défini sur le th seul. */
+        .col-colonie { width: 8%; }
+        .col-lignee { width: 10%; }
+        .col-critere { width: 15%; }
+        .col-note-libre { width: 22%; }
     </style>
 </head>
 <body>
-    {% include "selection/_bandeau_test.html" %}
+    {% include "selection/_bandeau_test.html" with pour_pdf=True %}
     <h1>Fiche de terrain — passe rapide</h1>
     <div class="entete">
         <p>Date : {{ date_jour|date:"d/m/Y" }} &nbsp;&nbsp;&nbsp; Rucher : {{ nom_rucher }}</p>
@@ -37,26 +47,26 @@
     {% if not lignes %}
         <p>Aucune colonie active enregistrée pour l'instant.</p>
     {% else %}
-        <table>
+        <table repeat="1">
             <thead>
                 <tr>
-                    <th style="width: 13%">Colonie</th>
-                    <th style="width: 15%">Lignée reine</th>
+                    <th class="col-colonie">Colonie</th>
+                    <th class="col-lignee">Lignée reine</th>
                     {% for critere in criteres %}
-                        <th style="width: 12%">{{ critere.nom }}</th>
+                        <th class="col-critere">{{ critere.nom }}</th>
                     {% endfor %}
-                    <th style="width: 24%">Note libre</th>
+                    <th class="col-note-libre">Note libre</th>
                 </tr>
             </thead>
             <tbody>
                 {% for ligne in lignes %}
                     <tr>
-                        <td>{{ ligne.colonie.ruche_identifiant }}</td>
-                        <td>{{ ligne.lignee|default:"—" }}</td>
+                        <td class="col-colonie">{{ ligne.colonie.ruche_identifiant }}</td>
+                        <td class="col-lignee">{{ ligne.lignee|default:"—" }}</td>
                         {% for critere in criteres %}
-                            <td class="case-note">1&nbsp;&nbsp;2&nbsp;&nbsp;3&nbsp;&nbsp;4</td>
+                            <td class="col-critere case-note">1&nbsp;&nbsp;2&nbsp;&nbsp;3&nbsp;&nbsp;4</td>
                         {% endfor %}
-                        <td class="note-libre"></td>
+                        <td class="col-note-libre note-libre"></td>
                     </tr>
                 {% endfor %}
             </tbody>
