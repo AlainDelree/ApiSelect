@@ -52,6 +52,9 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    # Connexion automatique en usage local (issue #35) : doit rester
+    # juste après AuthenticationMiddleware, qui résout request.user.
+    'selection.middleware.ConnexionAutomatiqueLocaleMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]

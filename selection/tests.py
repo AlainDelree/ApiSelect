@@ -1881,3 +1881,58 @@ class MesureCampagneObligatoireTests(TestCase):
         )
 
         mesure.full_clean()
+
+
+class ConnexionAutomatiqueLocaleMiddlewareTests(TestCase):
+    """Issue #35 : plus de formulaire de connexion en usage local — le
+    middleware connecte automatiquement un compte existant quand la
+    requête vient de 127.0.0.1 / ::1."""
+
+    def test_admin_accessible_sans_login_depuis_adresse_locale(self):
+        response = self.client.get(
+            reverse("admin:index"), REMOTE_ADDR="127.0.0.1",
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_page_login_admin_redirige_sans_formulaire_en_local(self):
+        response = self.client.get(
+            reverse("admin:login"), REMOTE_ADDR="127.0.0.1",
+        )
+
+        self.assertRedirects(response, reverse("admin:index"))
+
+    def test_cree_utilisateur_local_si_aucun_superutilisateur(self):
+        UserModel = get_user_model()
+        self.assertFalse(UserModel.objects.filter(is_superuser=True).exists())
+
+        self.client.get(reverse("admin:index"), REMOTE_ADDR="127.0.0.1")
+
+        self.assertEqual(
+            UserModel.objects.filter(is_superuser=True).count(), 1,
+        )
+        utilisateur = UserModel.objects.get(is_superuser=True)
+        self.assertEqual(utilisateur.username, "local")
+        self.assertFalse(utilisateur.has_usable_password())
+
+    def test_reutilise_superutilisateur_existant_sans_en_creer_un_autre(self):
+        UserModel = get_user_model()
+        existant = UserModel.objects.create_superuser(
+            username="alain", password="motdepasse-existant",
+        )
+
+        self.client.get(reverse("admin:index"), REMOTE_ADDR="127.0.0.1")
+
+        self.assertEqual(UserModel.objects.filter(is_superuser=True).count(), 1)
+        existant.refresh_from_db()
+        self.assertTrue(existant.has_usable_password())
+
+    def test_requete_non_locale_renvoyee_vers_le_login(self):
+        response = self.client.get(
+            reverse("admin:index"), REMOTE_ADDR="203.0.113.5",
+        )
+
+        self.assertRedirects(
+            response,
+            f"{reverse('admin:login')}?next={reverse('admin:index')}",
+        )
