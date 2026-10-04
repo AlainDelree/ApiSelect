@@ -10,14 +10,16 @@
   « Rucher Test » incluses (appartiennent à ces commandes).
 - Jamais de `migrate` sur `apiselect`/`apiselect_dev` : Alain s'en
   charge (`apiselect --dev`).
+- La vraie base `apiselect` est protégée par un mot de passe connu
+  d'Alain seul : CCL ne tente jamais de s'y connecter ni de le
+  deviner, ni de lancer `--prod` ou `--migrer`.
 - Tests : `python manage.py test selection gestion`. Vérification
   manuelle : jamais remplir ni purger la base de test.
 - Aucun `git push` : Alain pousse après relecture.
 
 ## Périmètre : deux parties, dépendance à sens unique
-Scission en deux, pour donner un jour la gestion seule à une autre
-personne (programme Windows autonome) et garder la sélection pour
-Alain :
+Scission en deux pour céder un jour la gestion seule (programme
+Windows autonome), sélection réservée à Alain :
 - **Gestion du rucher** (cible, construite d'abord) : ruchers, ruches,
   colonies, reines, visites ; à construire : récoltes, traitements,
   stocks.
@@ -32,8 +34,8 @@ sélection. Seule la sélection peut dépendre de la gestion.
 
 **Portabilité (pour tout nouveau code)** : pas de chemin écrit en dur,
 pas de SQL propre à PostgreSQL, pas de dépendance à un script bash —
-la version Windows autonome tournera sous SQLite (chantier ultérieur,
-non commencé ; base actuelle : PostgreSQL `apiselect`/`apiselect_dev`).
+la version Windows autonome tournera sous SQLite (chantier ultérieur ;
+base actuelle : PostgreSQL).
 
 ## Stack
 Python/Django, admin Django, xhtml2pdf.
@@ -45,15 +47,15 @@ vivante liée à une ruche (historique config + événements séparé).
 **Reine** = identité généalogique indépendante de la boîte (mère,
 lignée mâle probable, station de fécondation, statut vierge/fécondée,
 mode d'acquisition : élevée / achetée en CR / arrivée avec essaim /
-remérage naturel — issue #29). **CelluleRoyale** = tentative individuelle d'élevage (sélection).
+remérage naturel — issue #29). **CelluleRoyale** = tentative d'élevage (sélection).
 Alias : affichage seulement, jamais recherché/lié (champs structurés
 id/type+numéro).
 
 ## Documents de référence
-`Cours_Apiculture/` (gitignoré) : barème + calendrier source, jamais
-committé ni référencé.
+`Cours_Apiculture/` (gitignoré) : barème/calendrier source, jamais
+committé.
 
-## Sélection génétique (inchangée, reprise plus tard)
+## Sélection génétique (inchangée)
 9 critères (rapide : santé/propreté/agressivité/tenue au cadre ;
 approfondie : nettoyage/récolte/couvain/miel/pollen), score 1-4,
 fiches PDF. `LotCriteres` = lot nommé réutilisable de poids
@@ -68,8 +70,7 @@ devenue reine. Diagnostic (`/diagnostic/`, issue #32) :
 `selection/diagnostics.py`, liste `VERIFICATIONS`.
 
 ## État des migrations et d'avancement
-Tout est à jour sur `apiselect_dev`. Sur `apiselect`, 0010-0014 sont
-déjà appliquées (constaté par Alain) ; seules 0015, 0016 et celles de
-`gestion` à venir y sont encore en attente (Alain s'en charge).
-Saisie réelle en cours : 2 ruchers (Bovesse, Anhée). Alain reprend le
-projet après une pause.
+`apiselect_dev` à jour. Sur `apiselect` : 0010-0014 déjà appliquées
+(constaté par Alain), 0015/0016 et celles de `gestion` en attente
+(Alain s'en charge). Saisie réelle : 2 ruchers (Bovesse, Anhée).
+Reprise après une pause.

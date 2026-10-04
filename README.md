@@ -7,27 +7,42 @@ sur critères mesurables (voir `CONTEXTE.md` pour le détail fonctionnel).
 
 Depuis n'importe quel répertoire, la commande `apiselect` démarre le serveur
 de développement Django et ouvre automatiquement un onglet de navigateur sur
-`http://127.0.0.1:8000/admin/`. `Ctrl+C` arrête proprement le serveur.
+l'accueil du site (`http://127.0.0.1:8000/`). `Ctrl+C` arrête proprement le
+serveur.
 
 Le script se trouve dans `bin/apiselect` ; pour le rendre accessible en tapant
 simplement `apiselect`, créer un lien symbolique dans un dossier déjà présent
 dans le `PATH` (ex. `~/bin`) :
 
 ```bash
-ln -s /home/alain/ApiSelect/bin/apiselect ~/bin/apiselect
+ln -s /chemin/vers/ApiSelect/bin/apiselect ~/bin/apiselect
 ```
 
 (nécessite un nouveau terminal si `~/bin` vient d'être ajouté au `PATH`).
+
+**Principe : base de test par défaut.** `apiselect` (sans option) et
+`apiselect --dev` sont équivalents et ciblent toujours la base de test
+`apiselect_dev`. La vraie base `apiselect` n'est utilisée qu'explicitement,
+via `apiselect --prod`, avec son propre rôle PostgreSQL (`apiselect_prod`)
+et son propre mot de passe — jamais celui de `apiselect_dev`.
+
+```bash
+apiselect              # équivalent à --dev : base de test, sans danger
+apiselect --dev        # idem, explicite
+apiselect --prod        # vraie base 'apiselect' : demande le mot de passe
+apiselect --prod --migrer   # applique les migrations sur la vraie base,
+                             # après confirmation ; ne lance pas de serveur
+```
 
 ## Base de données de test (`--dev`)
 
 Pour tester l'outil de bout en bout (calcul d'index, calendrier, fiches PDF)
 avec des données fictives sans jamais risquer de toucher aux vraies données,
-`apiselect --dev` lance le serveur sur une seconde base PostgreSQL,
-`apiselect_dev`, séparée de la vraie base `apiselect`. Le code reste le
-même (pas de branche Git) : seule la base ciblée change, selon la variable
-d'environnement `DJANGO_DB_NAME` (absente par défaut, jamais utilisée sans
-ce choix explicite).
+`apiselect --dev` (ou `apiselect` sans option) lance le serveur sur une
+seconde base PostgreSQL, `apiselect_dev`, séparée de la vraie base
+`apiselect`. Le code reste le même (pas de branche Git) : seule la base
+ciblée change, selon la variable d'environnement `DJANGO_DB_NAME` (absente
+par défaut, jamais utilisée sans ce choix explicite).
 
 **Créer la base une seule fois** (le rôle `apiselect` existe déjà, utilisé
 par la vraie base — voir `.env`) :
@@ -46,6 +61,30 @@ Les tables sont créées/mises à jour automatiquement (`migrate`) au premier
 lancement. Un bandeau rouge « ⚠️ BASE DE TEST — données fictives » apparaît
 alors en haut de toutes les pages (admin Django et vues du projet), pour ne
 jamais confondre les deux bases pendant la manipulation.
+
+## Vraie base (`--prod`)
+
+`apiselect --prod` lance le serveur sur la vraie base `apiselect`, avec le
+rôle PostgreSQL dédié `apiselect_prod`. Le script demande le mot de passe au
+clavier (saisie masquée) : il n'est jamais écrit dans un fichier, jamais
+passé en argument, jamais affiché ni journalisé, et il est effacé de
+l'environnement à la sortie du script. Si l'authentification échoue, un
+message clair s'affiche et le script s'arrête sans lancer le serveur.
+Aucune migration n'est appliquée automatiquement en mode `--prod`, et le
+bandeau « BASE DE TEST » n'apparaît pas — un avertissement « VRAIE BASE »
+est affiché à la place dans le terminal.
+
+Pour appliquer les migrations en attente sur la vraie base (sans lancer de
+serveur) :
+
+```bash
+apiselect --prod --migrer
+```
+
+Le script demande le mot de passe, affiche la liste des migrations qui
+seraient appliquées, rappelle qu'une sauvegarde de la vraie base doit
+exister, puis demande de taper « oui » pour confirmer avant d'exécuter
+`migrate`.
 
 ### Peupler / purger le jeu de données fictif
 
