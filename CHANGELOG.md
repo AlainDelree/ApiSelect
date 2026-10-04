@@ -16,3 +16,4 @@
 ## Vérification
 
 `python manage.py test selection` : 131 tests, OK (aucun échec).
+
