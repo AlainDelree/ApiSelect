@@ -201,13 +201,14 @@ def nouvelle_visite(request, colonie_id):
                 observation_reine_morte is not None
                 and observation_reine_morte.certitude == CertitudeObservation.DOUTE
             ):
-                date_revisite = (
-                    form.cleaned_data["date_reverification_reine_morte"]
-                    or date_revisite_par_defaut(visite.date)
-                )
-                RappelRevisite.objects.create(
-                    observation=observation_reine_morte, date_revisite=date_revisite,
-                )
+                # Le modèle a déjà créé le rappel par défaut (visite + 9
+                # jours) à l'enregistrement ci-dessus ; on applique ici
+                # la date choisie dans le formulaire, s'il y en a une.
+                date_choisie = form.cleaned_data["date_reverification_reine_morte"]
+                if date_choisie:
+                    rappel = observation_reine_morte.rappel
+                    rappel.date_revisite = date_choisie
+                    rappel.save(update_fields=["date_revisite"])
             _enregistrer_observation(
                 visite, colonie, TypeObservationVisite.PILLAGE,
                 form.cleaned_data["observation_pillage"],

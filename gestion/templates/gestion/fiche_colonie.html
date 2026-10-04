@@ -127,13 +127,11 @@
             {% for visite in visites %}
             <li>
                 <p class="visite-date">{{ visite.date }}</p>
-                <p class="visite-detail">
-                    Reine : {{ visite.get_observation_reine_display|default:"non renseigné" }}
-                    · Couvain : {{ visite.nb_cadres_couvain|default:"?" }} cadre{{ visite.nb_cadres_couvain|pluralize }}
-                    · Abeilles : {{ visite.nb_cadres_abeilles|default:"?" }} cadre{{ visite.nb_cadres_abeilles|pluralize }}
-                    · Réserves : {{ visite.get_reserves_display|default:"non renseigné" }}
-                    · Comportement : {{ visite.get_comportement_display|default:"non renseigné" }}
-                </p>
+                {% with segments=visite.details_affichage %}
+                {% if segments %}
+                <p class="visite-detail">{{ segments|join:" · " }}</p>
+                {% endif %}
+                {% endwith %}
                 {% if visite.actions.all or visite.observations.all %}
                 <ul class="liste-tags">
                     {% for action in visite.actions.all %}

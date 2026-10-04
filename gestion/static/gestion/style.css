@@ -189,6 +189,7 @@ dd { margin: 0; }
 .sous-question {
     margin: 0.6em 0 0 1em; padding: 0.8em; border-left: 3px solid var(--bordure);
 }
+.erreur-champ { color: #c62828; font-size: 0.9em; margin: 0.4em 0 0; }
 
 .bouton-enregistrer {
     font-size: 1.15em; font-weight: bold; padding: 0.9em 2em;
@@ -207,7 +208,8 @@ dd { margin: 0; }
 .visite-detail { color: var(--texte-attenue); font-size: 0.92em; }
 .liste-tags { list-style: none; display: flex; flex-wrap: wrap; gap: 0.4em; margin: 0.4em 0 0; padding: 0; }
 .tag-action, .tag-observation {
-    display: inline-block; font-size: 0.82em; padding: 0.2em 0.6em;
+    display: inline-block; font-size: 0.82em; padding: 0.35em 0.75em;
+    line-height: 1.3; white-space: normal; max-width: 100%;
     border-radius: 12px; background: var(--fond-vide); color: var(--texte);
 }
 .tag-observation.certitude-doute { background: #f5a623; color: #fff; }

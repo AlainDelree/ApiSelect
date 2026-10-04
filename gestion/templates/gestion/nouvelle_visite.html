@@ -76,6 +76,9 @@
                     {{ form.date_reverification_reine_morte.label }}
                 </label>
                 {{ form.date_reverification_reine_morte }}
+                {% if form.date_reverification_reine_morte.errors %}
+                <p class="erreur-champ">{{ form.date_reverification_reine_morte.errors|striptags }}</p>
+                {% endif %}
             </div>
         </fieldset>
 
@@ -107,5 +110,6 @@
 
         <button type="submit" class="bouton-enregistrer">Enregistrer la visite</button>
     </form>
+    <script src="{% static 'gestion/visite.js' %}"></script>
 </body>
 </html>

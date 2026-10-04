@@ -15,6 +15,7 @@ from datetime import timedelta
 
 from django.db import models
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 
 from selection.models import Colonie
 
@@ -68,6 +69,25 @@ class Visite(models.Model):
 
     def __str__(self):
         return f"{self.colonie} — visite du {self.date}"
+
+    def details_affichage(self):
+        """Segments renseignés à afficher dans l'historique des
+        visites : seuls les champs effectivement remplis apparaissent,
+        une visite sans aucun ne montre que sa date (issue #45)."""
+        segments = []
+        if self.observation_reine:
+            segments.append(f"Reine : {self.get_observation_reine_display()}")
+        if self.nb_cadres_couvain is not None:
+            pluriel = "s" if self.nb_cadres_couvain != 1 else ""
+            segments.append(f"Couvain : {self.nb_cadres_couvain} cadre{pluriel}")
+        if self.nb_cadres_abeilles is not None:
+            pluriel = "s" if self.nb_cadres_abeilles != 1 else ""
+            segments.append(f"Abeilles : {self.nb_cadres_abeilles} cadre{pluriel}")
+        if self.reserves:
+            segments.append(f"Réserves : {self.get_reserves_display()}")
+        if self.comportement is not None:
+            segments.append(f"Comportement : {self.get_comportement_display()}")
+        return segments
 
 
 class TypeActionVisite(models.TextChoices):
@@ -165,6 +185,31 @@ class ObservationVisite(models.Model):
         self.statut = StatutObservation.INFIRMEE
         self.save(update_fields=["statut"])
 
+    def save(self, *args, **kwargs):
+        """La colonie d'une observation est toujours celle de sa
+        visite : jamais demandée au formulaire (admin ou autre), pour
+        éviter l'erreur de contrainte NOT NULL constatée depuis
+        l'administration (issue #45)."""
+        self.colonie_id = self.visite.colonie_id
+        super().save(*args, **kwargs)
+        self._creer_rappel_si_necessaire()
+
+    def _creer_rappel_si_necessaire(self):
+        """Une « reine morte » en doute et ouverte reçoit son rappel de
+        revérification dès sa création, quelle que soit l'origine
+        (formulaire à boutons, administration...). `get_or_create` sur
+        la relation un-à-un évite tout doublon si l'observation est
+        ré-enregistrée (issue #45)."""
+        if (
+            self.type_observation == TypeObservationVisite.REINE_MORTE
+            and self.certitude == CertitudeObservation.DOUTE
+            and self.statut == StatutObservation.OUVERTE
+        ):
+            RappelRevisite.objects.get_or_create(
+                observation=self,
+                defaults={"date_revisite": date_revisite_par_defaut(self.visite.date)},
+            )
+
 
 class RappelRevisite(models.Model):
     """Rappel de revérification automatique pour une observation
@@ -189,5 +234,9 @@ class RappelRevisite(models.Model):
 
 def date_revisite_par_defaut(date_visite):
     """Date de revérification par défaut pour une « reine morte » en
-    doute : date de la visite + 9 jours (modifiable à la saisie)."""
+    doute : date de la visite + 9 jours (modifiable à la saisie).
+    Accepte aussi une date au format ISO (ex. `Visite.date` assignée
+    comme chaîne avant tout rechargement depuis la base)."""
+    if isinstance(date_visite, str):
+        date_visite = parse_date(date_visite)
     return date_visite + timedelta(days=DELAI_RAPPEL_REINE_MORTE_JOURS)

@@ -89,6 +89,18 @@ class VisiteForm(forms.ModelForm):
             "comportement": forms.RadioSelect(attrs={"class": "groupe-choix"}),
         }
 
+    def clean(self):
+        cleaned_data = super().clean()
+        date_visite = cleaned_data.get("date")
+        date_reverification = cleaned_data.get("date_reverification_reine_morte")
+        if date_visite and date_reverification and date_reverification < date_visite:
+            self.add_error(
+                "date_reverification_reine_morte",
+                "La date de revérification ne peut pas être antérieure "
+                "à la date de la visite.",
+            )
+        return cleaned_data
+
 
 class RevisiteReineMorteForm(forms.Form):
     """Posée au passage suivant quand une observation « reine morte »

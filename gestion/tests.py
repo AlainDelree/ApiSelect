@@ -1,8 +1,10 @@
 from datetime import date, timedelta
 
+from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.formats import date_format
 
 from selection.models import (
     Colonie,
@@ -351,9 +353,10 @@ class NouvelleVisiteTests(TestCase):
             type_observation=TypeObservationVisite.REINE_MORTE,
             certitude=CertitudeObservation.DOUTE,
         )
-        rappel = RappelRevisite.objects.create(
-            observation=observation, date_revisite="2026-05-10",
-        )
+        # Le rappel à 9 jours est déjà créé automatiquement par le modèle
+        # à la création de l'observation ci-dessus (issue #45) : il tombe
+        # justement le 2026-05-10 (2026-05-01 + 9 jours).
+        rappel = observation.rappel
 
         reponse = self.client.get(
             reverse("gestion:nouvelle_visite", args=[self.colonie.id])
@@ -380,9 +383,9 @@ class NouvelleVisiteTests(TestCase):
             type_observation=TypeObservationVisite.REINE_MORTE,
             certitude=CertitudeObservation.DOUTE,
         )
-        rappel = RappelRevisite.objects.create(
-            observation=observation, date_revisite="2026-05-10",
-        )
+        # Rappel à 9 jours déjà créé automatiquement (2026-05-01 + 9
+        # jours = 2026-05-10, cf. issue #45).
+        rappel = observation.rappel
 
         self.client.post(
             reverse("gestion:nouvelle_visite", args=[self.colonie.id]),
@@ -484,12 +487,231 @@ class AccueilVisitesTests(TestCase):
             type_observation=TypeObservationVisite.REINE_MORTE,
             certitude=CertitudeObservation.DOUTE,
         )
-        RappelRevisite.objects.create(
-            observation=observation,
-            date_revisite=timezone.localdate() - timedelta(days=1),
-        )
+        # Rappel par défaut déjà créé automatiquement (issue #45) ; on le
+        # force dans le passé pour tester le marquage « en retard ».
+        rappel = observation.rappel
+        rappel.date_revisite = timezone.localdate() - timedelta(days=1)
+        rappel.save(update_fields=["date_revisite"])
 
         reponse = self.client.get(reverse("gestion:accueil"))
 
         self.assertContains(reponse, "À revérifier")
         self.assertContains(reponse, "rappel-en-retard")
+
+
+class ModeleObservationVisiteTests(TestCase):
+    """Colonie dénormalisée et rappel automatique au niveau du modèle,
+    quelle que soit l'origine de l'observation (issue #45)."""
+
+    def setUp(self):
+        self.rucher = Rucher.objects.create(nom="Rucher modèle")
+        self.type_ruche = TypeRuche.objects.get(code="DADANT10")
+        self.ruche = Ruche.objects.create(
+            type_ruche=self.type_ruche, numero=40, rucher=self.rucher,
+        )
+        self.colonie = Colonie.objects.create(
+            ruche=self.ruche, mode_creation=ModeCreationColonie.ACHAT, active=True,
+        )
+        self.visite = Visite.objects.create(colonie=self.colonie, date="2026-06-01")
+
+    def test_colonie_renseignee_automatiquement_meme_sans_la_fournir(self):
+        observation = ObservationVisite(
+            visite=self.visite,
+            type_observation=TypeObservationVisite.PILLAGE,
+            certitude=CertitudeObservation.DOUTE,
+        )
+        observation.save()
+
+        observation.refresh_from_db()
+        self.assertEqual(observation.colonie_id, self.colonie.id)
+
+    def test_reenregistrement_observation_ne_duplique_pas_le_rappel(self):
+        observation = ObservationVisite.objects.create(
+            visite=self.visite, colonie=self.colonie,
+            type_observation=TypeObservationVisite.REINE_MORTE,
+            certitude=CertitudeObservation.DOUTE,
+        )
+        self.assertEqual(
+            RappelRevisite.objects.filter(observation=observation).count(), 1,
+        )
+
+        # Ré-enregistrement (ex. ré-ouverture dans l'admin sans rien
+        # changer) : pas de second rappel.
+        observation.save()
+        observation.save()
+
+        self.assertEqual(
+            RappelRevisite.objects.filter(observation=observation).count(), 1,
+        )
+
+
+class AdminVisiteTests(TestCase):
+    """Ajout d'une visite avec observation « reine morte » en doute
+    depuis l'administration (issue #45) : plus d'erreur de contrainte
+    NOT NULL sur la colonie, rappel créé automatiquement."""
+
+    def setUp(self):
+        self.superuser = get_user_model().objects.create_superuser(
+            username="admin-visite", email="admin-visite@example.com",
+            password="motdepasse",
+        )
+        self.client.force_login(self.superuser)
+        self.rucher = Rucher.objects.create(nom="Rucher admin")
+        self.type_ruche = TypeRuche.objects.get(code="DADANT10")
+        self.ruche = Ruche.objects.create(
+            type_ruche=self.type_ruche, numero=50, rucher=self.rucher,
+        )
+        self.colonie = Colonie.objects.create(
+            ruche=self.ruche, mode_creation=ModeCreationColonie.ACHAT, active=True,
+        )
+
+    def _donnees_formulaire(self, **observation_overrides):
+        donnees = {
+            "colonie": self.colonie.id,
+            "date": "2026-06-10",
+            "observation_reine": "",
+            "nb_cadres_couvain": "",
+            "nb_cadres_abeilles": "",
+            "reserves": "",
+            "comportement": "",
+            "notes": "",
+            "actions-TOTAL_FORMS": "0",
+            "actions-INITIAL_FORMS": "0",
+            "actions-MIN_NUM_FORMS": "0",
+            "actions-MAX_NUM_FORMS": "1000",
+            "observations-TOTAL_FORMS": "1",
+            "observations-INITIAL_FORMS": "0",
+            "observations-MIN_NUM_FORMS": "0",
+            "observations-MAX_NUM_FORMS": "1000",
+            "observations-0-type_observation": TypeObservationVisite.REINE_MORTE,
+            "observations-0-certitude": CertitudeObservation.DOUTE,
+            "observations-0-statut": StatutObservation.OUVERTE,
+            "observations-0-reponse_cellules_royales": "",
+            "_save": "Enregistrer",
+        }
+        donnees.update(observation_overrides)
+        return donnees
+
+    def test_ajout_visite_avec_reine_morte_en_doute_sans_erreur(self):
+        reponse = self.client.post(
+            reverse("admin:gestion_visite_add"), self._donnees_formulaire(),
+        )
+
+        self.assertEqual(reponse.status_code, 302)
+        visite = Visite.objects.get(colonie=self.colonie)
+        observation = ObservationVisite.objects.get(visite=visite)
+        self.assertEqual(observation.colonie_id, self.colonie.id)
+        self.assertEqual(
+            RappelRevisite.objects.filter(observation=observation).count(), 1,
+        )
+        rappel = RappelRevisite.objects.get(observation=observation)
+        self.assertEqual(
+            rappel.date_revisite,
+            date(2026, 6, 10) + timedelta(days=DELAI_RAPPEL_REINE_MORTE_JOURS),
+        )
+
+    def test_rappel_modifiable_apres_coup_dans_ladmin(self):
+        self.client.post(reverse("admin:gestion_visite_add"), self._donnees_formulaire())
+        rappel = RappelRevisite.objects.get(observation__visite__colonie=self.colonie)
+
+        reponse = self.client.post(
+            reverse("admin:gestion_rappelrevisite_change", args=[rappel.id]),
+            {"observation": rappel.observation_id, "date_revisite": "2026-07-01", "traite": "on"},
+        )
+
+        self.assertEqual(reponse.status_code, 302)
+        rappel.refresh_from_db()
+        self.assertEqual(str(rappel.date_revisite), "2026-07-01")
+        self.assertTrue(rappel.traite)
+
+
+class RevisiteFormulaireBoutonsTests(TestCase):
+    """Date de revérification proposée et modifiable dans le formulaire
+    à boutons (issue #45)."""
+
+    def setUp(self):
+        self.rucher = Rucher.objects.create(nom="Rucher revérif")
+        self.type_ruche = TypeRuche.objects.get(code="DADANT10")
+        self.ruche = Ruche.objects.create(
+            type_ruche=self.type_ruche, numero=60, rucher=self.rucher,
+        )
+        self.colonie = Colonie.objects.create(
+            ruche=self.ruche, mode_creation=ModeCreationColonie.ACHAT, active=True,
+        )
+
+    def test_date_choisie_dans_le_formulaire_utilisee_pour_le_rappel(self):
+        self.client.post(
+            reverse("gestion:nouvelle_visite", args=[self.colonie.id]),
+            {
+                "date": "2026-06-15",
+                "observation_reine_morte": CertitudeObservation.DOUTE,
+                "date_reverification_reine_morte": "2026-06-20",
+            },
+        )
+
+        observation = ObservationVisite.objects.get(
+            colonie=self.colonie, type_observation=TypeObservationVisite.REINE_MORTE,
+        )
+        rappel = RappelRevisite.objects.get(observation=observation)
+        self.assertEqual(str(rappel.date_revisite), "2026-06-20")
+        self.assertEqual(
+            RappelRevisite.objects.filter(observation=observation).count(), 1,
+        )
+
+    def test_date_de_reverification_anterieure_a_la_visite_refusee(self):
+        reponse = self.client.post(
+            reverse("gestion:nouvelle_visite", args=[self.colonie.id]),
+            {
+                "date": "2026-06-15",
+                "observation_reine_morte": CertitudeObservation.DOUTE,
+                "date_reverification_reine_morte": "2026-06-10",
+            },
+        )
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertContains(
+            reponse,
+            "La date de revérification ne peut pas être antérieure",
+        )
+        self.assertFalse(Visite.objects.filter(colonie=self.colonie).exists())
+
+
+class HistoriqueVisitesAffichageTests(TestCase):
+    """L'historique des visites n'affiche que les éléments renseignés
+    (issue #45)."""
+
+    def setUp(self):
+        self.rucher = Rucher.objects.create(nom="Rucher historique")
+        self.type_ruche = TypeRuche.objects.get(code="DADANT10")
+        self.ruche = Ruche.objects.create(
+            type_ruche=self.type_ruche, numero=70, rucher=self.rucher,
+        )
+        self.colonie = Colonie.objects.create(
+            ruche=self.ruche, mode_creation=ModeCreationColonie.ACHAT, active=True,
+        )
+
+    def test_visite_sans_rien_renseigne_naffiche_que_la_date(self):
+        Visite.objects.create(colonie=self.colonie, date=date(2026, 6, 25))
+
+        reponse = self.client.get(
+            reverse("gestion:fiche_colonie", args=[self.colonie.id])
+        )
+
+        self.assertContains(reponse, date_format(date(2026, 6, 25)))
+        self.assertNotContains(reponse, "visite-detail")
+        self.assertNotContains(reponse, "Couvain :")
+        self.assertNotContains(reponse, "Abeilles :")
+
+    def test_visite_partielle_naffiche_que_les_champs_renseignes(self):
+        Visite.objects.create(
+            colonie=self.colonie, date=date(2026, 6, 26), nb_cadres_couvain=5,
+        )
+
+        reponse = self.client.get(
+            reverse("gestion:fiche_colonie", args=[self.colonie.id])
+        )
+
+        self.assertContains(reponse, "Couvain : 5 cadre")
+        self.assertNotContains(reponse, "Abeilles :")
+        self.assertNotContains(reponse, "Réserves :")
+        self.assertNotContains(reponse, "Comportement :")
