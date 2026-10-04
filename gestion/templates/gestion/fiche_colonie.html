@@ -16,6 +16,12 @@
 
     <h1>{{ colonie.ruche.type_ruche.libelle_affichage }} {{ colonie.ruche.numero }}</h1>
 
+    <p>
+        <a class="bouton-nouvelle-visite" href="{% url 'gestion:nouvelle_visite' colonie.id %}">
+            + Nouvelle visite
+        </a>
+    </p>
+
     <section class="fiche-bloc">
         <h2>Ruche</h2>
         <dl>
@@ -76,6 +82,77 @@
         </dl>
         {% else %}
         <p class="message-vide">Aucune configuration enregistrée.</p>
+        {% endif %}
+    </section>
+
+    <section class="fiche-bloc bloc-observations-ouvertes">
+        <h2>Observations ouvertes</h2>
+        {% if observations_ouvertes %}
+        {% for observation in observations_ouvertes %}
+        <div class="observation-ouverte">
+            <p>
+                <strong>{{ observation.get_type_observation_display }}</strong>
+                — {{ observation.get_certitude_display }}
+                {% if observation.type_observation == "ESSAIMAGE" and observation.reponse_cellules_royales %}
+                    (cellules royales : {{ observation.get_reponse_cellules_royales_display|lower }})
+                {% endif %}
+            </p>
+            {% if observation.rappel %}
+            <p class="rappel-date">
+                Revérification prévue le {{ observation.rappel.date_revisite }}
+                {% if observation.rappel.traite %}(traité){% endif %}
+            </p>
+            {% endif %}
+            <div class="boutons-observation">
+                <form method="post" action="{% url 'gestion:confirmer_observation' observation.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="bouton-confirmer">Confirmer</button>
+                </form>
+                <form method="post" action="{% url 'gestion:infirmer_observation' observation.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="bouton-infirmer">Infirmer</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <p class="message-vide">Aucune observation ouverte.</p>
+        {% endif %}
+    </section>
+
+    <section class="fiche-bloc">
+        <h2>Historique des visites</h2>
+        {% if visites %}
+        <ul class="liste-visites">
+            {% for visite in visites %}
+            <li>
+                <p class="visite-date">{{ visite.date }}</p>
+                <p class="visite-detail">
+                    Reine : {{ visite.get_observation_reine_display|default:"non renseigné" }}
+                    · Couvain : {{ visite.nb_cadres_couvain|default:"?" }} cadre{{ visite.nb_cadres_couvain|pluralize }}
+                    · Abeilles : {{ visite.nb_cadres_abeilles|default:"?" }} cadre{{ visite.nb_cadres_abeilles|pluralize }}
+                    · Réserves : {{ visite.get_reserves_display|default:"non renseigné" }}
+                    · Comportement : {{ visite.get_comportement_display|default:"non renseigné" }}
+                </p>
+                {% if visite.actions.all or visite.observations.all %}
+                <ul class="liste-tags">
+                    {% for action in visite.actions.all %}
+                    <li class="tag-action">{{ action.get_type_action_display }}</li>
+                    {% endfor %}
+                    {% for observation in visite.observations.all %}
+                    <li class="tag-observation certitude-{{ observation.certitude|lower }}">
+                        {{ observation.get_type_observation_display }}
+                        ({{ observation.get_certitude_display|lower }} — {{ observation.get_statut_display|lower }})
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+                {% if visite.notes %}<p class="notes">{{ visite.notes }}</p>{% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="message-vide">Aucune visite enregistrée.</p>
         {% endif %}
     </section>
 

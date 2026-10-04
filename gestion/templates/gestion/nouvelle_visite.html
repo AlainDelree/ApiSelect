@@ -1,0 +1,111 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Nouvelle visite — {{ colonie }} — ApiSelect</title>
+    <link rel="stylesheet" href="{% static 'gestion/style.css' %}">
+</head>
+<body{% if BASE_DE_TEST_ACTIVE %} class="avec-bandeau"{% endif %}>
+    {% if BASE_DE_TEST_ACTIVE %}
+    <div class="bandeau-base-test">⚠️ BASE DE TEST — données fictives</div>
+    {% endif %}
+
+    <p class="lien-retour">
+        <a href="{% url 'gestion:fiche_colonie' colonie.id %}">&larr; Retour à la fiche colonie</a>
+    </p>
+
+    <div class="en-tete-ruche"{% if colonie.ruche.couleur %} style="--couleur-ruche: {{ colonie.ruche.couleur }};"{% endif %}>
+        {% if colonie.ruche.couleur %}<span class="pastille-ruche"></span>{% endif %}
+        <h1>{{ colonie.ruche.type_ruche.libelle_affichage }} {{ colonie.ruche.numero }} — Nouvelle visite</h1>
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <div class="champ-visite">
+            <label for="{{ form.date.id_for_label }}">{{ form.date.label }}</label>
+            {{ form.date }}
+        </div>
+
+        <div class="champ-visite">
+            <p class="etiquette">{{ form.observation_reine.label }}</p>
+            {{ form.observation_reine }}
+        </div>
+
+        <div class="champ-visite">
+            <label for="{{ form.nb_cadres_couvain.id_for_label }}">{{ form.nb_cadres_couvain.label }}</label>
+            {{ form.nb_cadres_couvain }}
+        </div>
+
+        <div class="champ-visite">
+            <label for="{{ form.nb_cadres_abeilles.id_for_label }}">{{ form.nb_cadres_abeilles.label }}</label>
+            {{ form.nb_cadres_abeilles }}
+        </div>
+
+        <div class="champ-visite">
+            <p class="etiquette">{{ form.reserves.label }}</p>
+            {{ form.reserves }}
+        </div>
+
+        <div class="champ-visite">
+            <p class="etiquette">{{ form.comportement.label }}</p>
+            {{ form.comportement }}
+        </div>
+
+        <div class="champ-visite">
+            <p class="etiquette">{{ form.actions.label }}</p>
+            {{ form.actions }}
+        </div>
+
+        <fieldset class="champ-visite">
+            <legend class="etiquette">{{ form.observation_essaimage.label }}</legend>
+            {{ form.observation_essaimage }}
+            <div class="sous-question">
+                <p class="etiquette">{{ form.reponse_cellules_royales.label }}</p>
+                {{ form.reponse_cellules_royales }}
+            </div>
+        </fieldset>
+
+        <fieldset class="champ-visite">
+            <legend class="etiquette">{{ form.observation_reine_morte.label }}</legend>
+            {{ form.observation_reine_morte }}
+            <div class="sous-question">
+                <label for="{{ form.date_reverification_reine_morte.id_for_label }}">
+                    {{ form.date_reverification_reine_morte.label }}
+                </label>
+                {{ form.date_reverification_reine_morte }}
+            </div>
+        </fieldset>
+
+        <div class="champ-visite">
+            <p class="etiquette">{{ form.observation_pillage.label }}</p>
+            {{ form.observation_pillage }}
+        </div>
+
+        <div class="champ-visite">
+            <p class="etiquette">{{ form.observation_frelons.label }}</p>
+            {{ form.observation_frelons }}
+        </div>
+
+        {% if revisite_form %}
+        <fieldset class="champ-visite sous-question">
+            <legend class="etiquette">
+                Observation « reine morte » ouverte (depuis le
+                {{ observation_reine_morte_ouverte.visite.date }}) —
+                {{ revisite_form.couvain_ouvert_present.label }}
+            </legend>
+            {{ revisite_form.couvain_ouvert_present }}
+        </fieldset>
+        {% endif %}
+
+        <div class="champ-visite">
+            <label for="{{ form.notes.id_for_label }}">{{ form.notes.label }}</label>
+            {{ form.notes }}
+        </div>
+
+        <button type="submit" class="bouton-enregistrer">Enregistrer la visite</button>
+    </form>
+</body>
+</html>

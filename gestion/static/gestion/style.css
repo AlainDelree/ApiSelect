@@ -140,3 +140,108 @@ dd { margin: 0; }
 .liste-evenements li { padding: 0.4em 0; border-bottom: 1px solid var(--bordure); }
 .liste-evenements li:last-child { border-bottom: none; }
 .notes { color: var(--texte-attenue); font-size: 0.9em; }
+
+/* Formulaire de visite à grands boutons à toucher (issue #43). */
+
+.bouton-nouvelle-visite {
+    display: inline-block; margin: 0 0 1.2em; padding: 0.9em 1.4em;
+    background: var(--lien); color: #fff; text-decoration: none;
+    border-radius: 10px; font-size: 1.1em; font-weight: bold;
+}
+
+.en-tete-ruche {
+    display: flex; align-items: center; gap: 0.6em; margin-bottom: 1em;
+}
+.en-tete-ruche .pastille-ruche { width: 1.3em; height: 1.3em; }
+
+.champ-visite { margin-bottom: 1.4em; }
+.champ-visite > label, .champ-visite > p.etiquette {
+    display: block; font-weight: bold; margin-bottom: 0.5em;
+}
+.champ-visite input[type="number"],
+.champ-visite input[type="date"],
+.champ-visite textarea {
+    font-size: 1.1em; padding: 0.6em; width: 100%; max-width: 320px;
+    border: 2px solid var(--bordure); border-radius: 8px;
+    background: var(--fond-tuile); color: var(--texte);
+}
+.champ-visite textarea { max-width: 100%; min-height: 5em; }
+
+.groupe-choix {
+    list-style: none; margin: 0; padding: 0;
+    display: flex; flex-wrap: wrap; gap: 0.6em;
+}
+.groupe-choix > div { margin: 0; }
+.groupe-choix label {
+    display: flex; align-items: center; gap: 0.5em;
+    padding: 0.9em 1.1em; min-height: 1.3em;
+    border: 2px solid var(--bordure); border-radius: 10px;
+    background: var(--fond-tuile); cursor: pointer; font-size: 1.05em;
+}
+.groupe-choix input[type="radio"], .groupe-choix input[type="checkbox"] {
+    width: 1.4em; height: 1.4em; accent-color: var(--lien); flex: 0 0 auto;
+}
+.groupe-choix label:has(input:checked) {
+    border-color: var(--lien); background: var(--lien); color: #fff;
+    font-weight: bold;
+}
+
+.sous-question {
+    margin: 0.6em 0 0 1em; padding: 0.8em; border-left: 3px solid var(--bordure);
+}
+
+.bouton-enregistrer {
+    font-size: 1.15em; font-weight: bold; padding: 0.9em 2em;
+    background: var(--lien); color: #fff; border: none; border-radius: 10px;
+    cursor: pointer; margin-top: 0.5em;
+}
+
+/* Historique des visites et observations ouvertes (fiche colonie). */
+
+.liste-visites { list-style: none; margin: 0; padding: 0; }
+.liste-visites li {
+    padding: 0.7em 0; border-bottom: 1px solid var(--bordure);
+}
+.liste-visites li:last-child { border-bottom: none; }
+.visite-date { font-weight: bold; }
+.visite-detail { color: var(--texte-attenue); font-size: 0.92em; }
+.liste-tags { list-style: none; display: flex; flex-wrap: wrap; gap: 0.4em; margin: 0.4em 0 0; padding: 0; }
+.tag-action, .tag-observation {
+    display: inline-block; font-size: 0.82em; padding: 0.2em 0.6em;
+    border-radius: 12px; background: var(--fond-vide); color: var(--texte);
+}
+.tag-observation.certitude-doute { background: #f5a623; color: #fff; }
+.tag-observation.certitude-constate { background: #d9534f; color: #fff; }
+
+.bloc-observations-ouvertes .observation-ouverte {
+    padding: 0.8em; margin-bottom: 0.8em; border: 1px solid var(--bordure);
+    border-radius: 8px;
+}
+.observation-ouverte:last-child { margin-bottom: 0; }
+.observation-ouverte .rappel-date { color: var(--texte-attenue); font-size: 0.9em; }
+.boutons-observation { display: flex; gap: 0.6em; margin-top: 0.6em; }
+.boutons-observation button {
+    font-size: 1em; padding: 0.6em 1.1em; border-radius: 8px; cursor: pointer;
+    border: 2px solid var(--bordure); background: var(--fond-tuile); color: var(--texte);
+}
+.bouton-confirmer { border-color: #43a047 !important; color: #2e7d32; }
+.bouton-infirmer { border-color: #d9534f !important; color: #c62828; }
+
+/* Pastilles d'observations et bloc « à revérifier » (accueil). */
+
+.pastille-observation {
+    display: inline-block; font-size: 0.78em; padding: 0.15em 0.55em;
+    border-radius: 10px; margin: 0.15em 0.2em 0 0; background: #d9534f; color: #fff;
+}
+.pastille-observation.certitude-doute { background: #f5a623; }
+.tuile-derniere-visite { font-size: 0.85em; color: var(--texte-attenue); margin: 0.3em 0 0; }
+
+.bloc-a-revisiter {
+    margin: 1.5em 0; padding: 1em; background: var(--fond-tuile);
+    border: 1px solid var(--bordure); border-radius: 8px;
+}
+.bloc-a-revisiter h2 { margin-top: 0; }
+.liste-rappels { list-style: none; margin: 0; padding: 0; }
+.liste-rappels li { padding: 0.4em 0; border-bottom: 1px solid var(--bordure); }
+.liste-rappels li:last-child { border-bottom: none; }
+.rappel-en-retard { color: #c62828; font-weight: bold; }

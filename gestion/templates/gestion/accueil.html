@@ -22,6 +22,25 @@
         <p class="lien-admin"><a href="{% url 'admin:index' %}">Administration &rarr;</a></p>
     </header>
 
+    {% if rappels_a_revisiter %}
+    <section class="bloc-a-revisiter">
+        <h2>À revérifier</h2>
+        <ul class="liste-rappels">
+            {% for item in rappels_a_revisiter %}
+            <li{% if item.en_retard %} class="rappel-en-retard"{% endif %}>
+                {{ item.rappel.observation.colonie.ruche.type_ruche.libelle_affichage }}
+                {{ item.rappel.observation.colonie.ruche.numero }}
+                — {{ item.rappel.observation.get_type_observation_display }}
+                — revérification prévue le {{ item.rappel.date_revisite }}
+                {% if item.en_retard %}(échéance atteinte ou dépassée){% endif %}
+                —
+                <a href="{% url 'gestion:fiche_colonie' item.rappel.observation.colonie.id %}">voir la fiche</a>
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
     {% if not sections %}
         <p class="message-vide">Aucun rucher enregistré pour l'instant.</p>
     {% endif %}

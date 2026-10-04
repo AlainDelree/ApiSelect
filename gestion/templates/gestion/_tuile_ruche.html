@@ -16,6 +16,27 @@
             {% else %}
             <p class="tuile-reine tuile-reine-absente">Reine non renseignée</p>
             {% endif %}
+            <p class="tuile-derniere-visite">
+                {% if tuile.derniere_visite %}
+                    Dernière visite : il y a {{ tuile.jours_depuis_visite }} jour{{ tuile.jours_depuis_visite|pluralize }}
+                {% else %}
+                    Aucune visite
+                {% endif %}
+            </p>
+            {% if tuile.observations_ouvertes %}
+            <p>
+                {% for observation in tuile.observations_ouvertes %}
+                <span class="pastille-observation certitude-{{ observation.certitude|lower }}">
+                    {% if observation.type_observation == "REINE_MORTE" %}Reine morte ?
+                    {% elif observation.type_observation == "ESSAIMAGE" %}Essaimage ?
+                    {% elif observation.type_observation == "PILLAGE" %}Pillage
+                    {% elif observation.type_observation == "FRELONS" %}Frelons
+                    {% else %}{{ observation.get_type_observation_display }}
+                    {% endif %}
+                </span>
+                {% endfor %}
+            </p>
+            {% endif %}
         {% else %}
             <p class="tuile-statut">Vide</p>
         {% endif %}
