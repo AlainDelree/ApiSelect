@@ -18,8 +18,14 @@ from django.contrib import admin
 from django.urls import include, path
 from django.views.generic import RedirectView
 
+from selection.views import admin_index_avec_tableau
+
 urlpatterns = [
     path('', RedirectView.as_view(url='/admin/', permanent=False)),
+    # Intercepte uniquement l'URL exacte 'admin/' pour y afficher le
+    # tableau de résultats de sélection (issue #38) ; toutes les autres
+    # URL admin/... retombent sur admin.site.urls juste après, inchangé.
+    path('admin/', admin.site.admin_view(admin_index_avec_tableau)),
     path('admin/', admin.site.urls),
     path('selection/', include('selection.urls')),
 ]

@@ -1,0 +1,42 @@
+{% extends "admin/index.html" %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    /* Place le tableau de résultats de sélection dans l'espace libre à
+       droite des modules de l'admin (issue #38), sans élargir le cadre
+       600px historique du dashboard : #content garde sa taille, le
+       nouveau bloc devient un deuxième item flex qui se place à côté
+       sur un écran large et passe dessous (flex-wrap) sur un écran
+       étroit. */
+    .dashboard #content-start {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: 24px;
+    }
+    .dashboard #content-start > .messagelist {
+        flex: 1 1 100%;
+    }
+    .dashboard #content.colMS {
+        margin-right: 0;
+        flex: 0 0 auto;
+    }
+    #tableau-resultats-admin {
+        flex: 1 1 420px;
+        min-width: 280px;
+        max-width: 100%;
+    }
+    #tableau-resultats-admin h2 {
+        margin-top: 0;
+    }
+</style>
+{% endblock %}
+
+{% block footer %}
+{{ block.super }}
+<div id="tableau-resultats-admin">
+    <h2>Résultats de sélection</h2>
+    {% include "selection/_tableau_resultats.html" %}
+</div>
+{% endblock %}

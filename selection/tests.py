@@ -238,6 +238,77 @@ class ResultatsSelectionViewTests(TestCase):
         self.assertEqual(list(response.context["campagnes"]), [])
 
 
+class ResultatsSelectionSurPageAccueilAdminTests(TestCase):
+    """Issue #38 : le tableau de résultats s'affiche directement sur la
+    page d'accueil de l'admin (même calcul que `selection:resultats`,
+    via le gabarit partiel partagé), avec prise en compte de
+    `?campagne=`."""
+
+    def _creer_colonie(self, numero):
+        type_ruche = TypeRuche.objects.get(code="DADANT10")
+        ruche = Ruche.objects.create(type_ruche=type_ruche, numero=numero)
+        return Colonie.objects.create(
+            ruche=ruche, mode_creation="ACHAT", date_creation="2026-01-01",
+            active=True,
+        )
+
+    def setUp(self):
+        self.superuser = get_user_model().objects.create_superuser(
+            username="admin-accueil", email="admin-accueil@example.com",
+            password="motdepasse",
+        )
+        self.client.force_login(self.superuser)
+        self.lot_criteres = LotCriteres.objects.create(nom="Lot 2026")
+        self.campagne_recente = CampagneElevage.objects.create(
+            nom="Campagne récente", annee=2026, lot_criteres=self.lot_criteres,
+        )
+        self.campagne_ancienne = CampagneElevage.objects.create(
+            nom="Campagne ancienne", annee=2020, lot_criteres=self.lot_criteres,
+        )
+        self.critere_sante = CritereSelection.objects.get(code="SANTE")
+
+    def test_tableau_affiche_pour_la_campagne_la_plus_recente(self):
+        colonie = self._creer_colonie(1)
+        Mesure.objects.create(
+            colonie=colonie, critere=self.critere_sante,
+            campagne=self.campagne_recente, date_mesure="2026-05-01",
+            valeur_brute="bonne", score=4,
+        )
+
+        response = self.client.get(reverse("admin:index"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.context["campagne_selectionnee"], self.campagne_recente,
+        )
+        lignes = response.context["lignes"]
+        self.assertEqual(len(lignes), 1)
+        self.assertEqual(lignes[0]["colonie"].colonie_id, colonie.id)
+        self.assertContains(response, lignes[0]["colonie"].ruche_identifiant)
+        self.assertContains(response, "Retenue")
+        self.assertContains(response, "id=\"tableau-resultats-admin\"")
+
+    def test_parametre_campagne_pris_en_compte(self):
+        colonie = self._creer_colonie(2)
+        Mesure.objects.create(
+            colonie=colonie, critere=self.critere_sante,
+            campagne=self.campagne_ancienne, date_mesure="2020-05-01",
+            valeur_brute="bonne", score=3,
+        )
+
+        response = self.client.get(
+            reverse("admin:index"), {"campagne": self.campagne_ancienne.id},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.context["campagne_selectionnee"], self.campagne_ancienne,
+        )
+        lignes = response.context["lignes"]
+        self.assertEqual(len(lignes), 1)
+        self.assertEqual(lignes[0]["colonie"].colonie_id, colonie.id)
+
+
 class LotCriteresReutilisableEntreCampagnesTests(TestCase):
     """Vérifie le découplage des poids (issue #19) : un même LotCriteres
     peut être assigné à plusieurs campagnes simultanément, et l'index se
@@ -1250,14 +1321,28 @@ class LiensSelectionToutesPagesAdminTests(TestCase):
             reverse("admin:selection_etapecalendrier_changelist")
         )
 
-        self.assertContains(response, reverse("selection:resultats"))
+        # Issue #38 : le lien « Tableau de résultats de sélection » mène
+        # désormais à la page d'accueil de l'admin (qui affiche le
+        # tableau), plus à l'ancienne page `selection:resultats`.
+        self.assertContains(
+            response,
+            '<a href="{}">Tableau de résultats de sélection</a>'.format(
+                reverse("admin:index")
+            ),
+        )
         self.assertContains(response, reverse("selection:calendrier"))
         self.assertContains(response, reverse("selection:taches"))
 
     def test_liens_presents_une_seule_fois_sur_laccueil(self):
         response = self.client.get(reverse("admin:index"))
 
-        self.assertContains(response, reverse("selection:resultats"), count=1)
+        self.assertContains(
+            response,
+            '<a href="{}">Tableau de résultats de sélection</a>'.format(
+                reverse("admin:index")
+            ),
+            count=1,
+        )
         self.assertContains(response, reverse("selection:calendrier"), count=1)
         self.assertContains(response, reverse("selection:taches"), count=1)
 
