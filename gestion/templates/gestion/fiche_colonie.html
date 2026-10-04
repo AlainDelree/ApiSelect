@@ -1,0 +1,104 @@
+{% load static gestion_extras %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ colonie }} — ApiSelect</title>
+    <link rel="stylesheet" href="{% static 'gestion/style.css' %}">
+</head>
+<body{% if BASE_DE_TEST_ACTIVE %} class="avec-bandeau"{% endif %}>
+    {% if BASE_DE_TEST_ACTIVE %}
+    <div class="bandeau-base-test">⚠️ BASE DE TEST — données fictives</div>
+    {% endif %}
+
+    <p class="lien-retour"><a href="{% url 'gestion:accueil' %}">&larr; Retour à l'accueil</a></p>
+
+    <h1>{{ colonie.ruche.type_ruche.libelle_affichage }} {{ colonie.ruche.numero }}</h1>
+
+    <section class="fiche-bloc">
+        <h2>Ruche</h2>
+        <dl>
+            <dt>Type</dt><dd>{{ colonie.ruche.type_ruche.nom }}</dd>
+            <dt>Numéro</dt><dd>{{ colonie.ruche.numero }}</dd>
+            <dt>Couleur</dt>
+            <dd>
+                {% if colonie.ruche.couleur %}
+                    <span class="pastille-ruche" style="--couleur-ruche: {{ colonie.ruche.couleur }};"></span>
+                    {{ colonie.ruche.couleur }}
+                {% else %}
+                    non renseignée
+                {% endif %}
+            </dd>
+            <dt>Rucher</dt><dd>{{ colonie.ruche.rucher|default:"non assigné" }}</dd>
+        </dl>
+    </section>
+
+    <section class="fiche-bloc">
+        <h2>Colonie</h2>
+        <dl>
+            <dt>Mode de création</dt><dd>{{ colonie.get_mode_creation_display }}</dd>
+            <dt>Date de création</dt><dd>{{ colonie.date_creation|default:"inconnue" }}</dd>
+        </dl>
+    </section>
+
+    <section class="fiche-bloc">
+        <h2>Reine</h2>
+        {% if colonie.reine_actuelle %}
+        <dl>
+            <dt>Identifiant</dt><dd>{{ colonie.reine_actuelle.identifiant }}</dd>
+            <dt>Marquage</dt>
+            <dd>
+                {% if colonie.reine_actuelle.couleur_marquage %}
+                    <span class="pastille-marquage" style="--couleur-marquage: {{ colonie.reine_actuelle.couleur_marquage|couleur_marquage }};"></span>
+                    {{ colonie.reine_actuelle.get_couleur_marquage_display }}
+                {% else %}
+                    non renseigné
+                {% endif %}
+            </dd>
+            <dt>Mère</dt><dd>{{ colonie.reine_actuelle.mere|default:"inconnue" }}</dd>
+            <dt>Mode d'acquisition</dt><dd>{{ colonie.reine_actuelle.get_mode_acquisition_display|default:"non renseigné" }}</dd>
+            <dt>Statut</dt><dd>{{ colonie.reine_actuelle.get_statut_display|default:"non renseigné" }}</dd>
+            <dt>Date de fécondation</dt><dd>{{ colonie.reine_actuelle.date_fecondation|default:"non renseignée" }}</dd>
+        </dl>
+        {% else %}
+        <p class="message-vide">Aucune reine renseignée pour cette colonie.</p>
+        {% endif %}
+    </section>
+
+    <section class="fiche-bloc">
+        <h2>Configuration actuelle</h2>
+        {% if configuration_actuelle %}
+        <dl>
+            <dt>Date</dt><dd>{{ configuration_actuelle.date }}</dd>
+            <dt>Corps</dt><dd>{{ configuration_actuelle.nb_corps }}</dd>
+            <dt>Hausses</dt><dd>{{ configuration_actuelle.nb_hausses }}</dd>
+        </dl>
+        {% else %}
+        <p class="message-vide">Aucune configuration enregistrée.</p>
+        {% endif %}
+    </section>
+
+    <section class="fiche-bloc">
+        <h2>Historique des événements</h2>
+        {% if evenements %}
+        <ul class="liste-evenements">
+            {% for evenement in evenements %}
+            <li>
+                <strong>{{ evenement.date }}</strong> — {{ evenement.get_type_evenement_display }}
+                {% if evenement.ruche_destination %} vers {{ evenement.ruche_destination }}{% endif %}
+                {% if evenement.reine %} ({{ evenement.reine.identifiant }}){% endif %}
+                {% if evenement.notes %}<br><span class="notes">{{ evenement.notes }}</span>{% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="message-vide">Aucun événement enregistré.</p>
+        {% endif %}
+    </section>
+
+    <p class="lien-admin">
+        <a href="{% url 'admin:selection_colonie_change' colonie.pk %}">Modifier dans l'administration &rarr;</a>
+    </p>
+</body>
+</html>

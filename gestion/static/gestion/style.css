@@ -1,0 +1,142 @@
+/* Feuille de style de l'écran de gestion du rucher (issue #41).
+   Fournie avec le projet : aucune police ni ressource chargée depuis
+   Internet. Couleurs lisibles en thème clair comme en thème sombre
+   (variables CSS + prefers-color-scheme), tuiles qui se réorganisent
+   selon la largeur de l'écran (grille en auto-fill). */
+
+:root {
+    --fond: #f7f7f5;
+    --texte: #222;
+    --texte-attenue: #595959;
+    --fond-tuile: #ffffff;
+    --bordure: #ddd;
+    --couleur-neutre: #90a4ae;
+    --fond-vide: #e4e4e4;
+    --lien: #1565c0;
+    --ombre: rgba(0, 0, 0, 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --fond: #1b1b1b;
+        --texte: #eee;
+        --texte-attenue: #aaa;
+        --fond-tuile: #2a2a2a;
+        --bordure: #444;
+        --couleur-neutre: #607d8b;
+        --fond-vide: #333;
+        --lien: #64b5f6;
+        --ombre: rgba(0, 0, 0, 0.5);
+    }
+}
+
+* { box-sizing: border-box; }
+
+body {
+    font-family: sans-serif;
+    margin: 0;
+    padding: 1.5em;
+    background: var(--fond);
+    color: var(--texte);
+}
+
+body.avec-bandeau { padding-top: 3.9em; }
+
+a { color: var(--lien); }
+
+.bandeau-base-test {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 10000;
+    background: #d9534f; color: #fff; text-align: center;
+    font-weight: bold; padding: 0.5em; font-size: 1em;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+header.en-tete { margin-bottom: 1.5em; }
+header.en-tete h1 { margin: 0 0 0.3em; }
+.compteurs { color: var(--texte-attenue); margin: 0.2em 0; }
+.lien-admin, .lien-retour { margin: 0.5em 0 1.5em; display: inline-block; }
+
+section.rucher { margin-bottom: 2em; }
+section.rucher h2 {
+    margin-bottom: 0.6em; border-bottom: 1px solid var(--bordure);
+    padding-bottom: 0.2em;
+}
+
+.grille-tuiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 1em;
+}
+
+.tuile {
+    display: block;
+    text-decoration: none;
+    color: var(--texte);
+    background: var(--fond-tuile);
+    border: 1px solid var(--bordure);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px var(--ombre);
+    transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+a.tuile:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px var(--ombre);
+}
+
+.tuile-vide {
+    background: var(--fond-vide);
+    filter: grayscale(0.6);
+    opacity: 0.8;
+    cursor: default;
+}
+
+.tuile-bande {
+    height: 10px;
+    background: var(--couleur-ruche, var(--couleur-neutre));
+}
+
+.tuile-corps { padding: 0.8em; }
+
+.tuile-titre { font-weight: bold; margin: 0 0 0.2em; }
+.tuile-type { font-size: 0.85em; color: var(--texte-attenue); margin: 0 0 0.6em; }
+
+.tuile-reine, .tuile-statut {
+    display: flex; align-items: center; gap: 0.4em;
+    font-size: 0.9em; margin: 0;
+}
+.tuile-reine-absente { color: var(--texte-attenue); font-style: italic; }
+.tuile-statut {
+    color: var(--texte-attenue); font-weight: bold;
+    text-transform: uppercase; letter-spacing: 0.05em;
+}
+
+.pastille-marquage, .pastille-ruche {
+    display: inline-block;
+    width: 0.9em; height: 0.9em;
+    border-radius: 50%;
+    background: var(--couleur-marquage, var(--couleur-ruche, var(--couleur-neutre)));
+    border: 1px solid var(--bordure);
+    flex: 0 0 auto;
+}
+
+.message-vide { color: var(--texte-attenue); font-style: italic; }
+
+.fiche-bloc {
+    margin-bottom: 1.5em;
+    padding: 1em;
+    background: var(--fond-tuile);
+    border: 1px solid var(--bordure);
+    border-radius: 8px;
+}
+.fiche-bloc h2 { margin-top: 0; }
+
+dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.3em 1em; margin: 0; }
+dt { color: var(--texte-attenue); }
+dd { margin: 0; }
+
+.liste-evenements { list-style: none; margin: 0; padding: 0; }
+.liste-evenements li { padding: 0.4em 0; border-bottom: 1px solid var(--bordure); }
+.liste-evenements li:last-child { border-bottom: none; }
+.notes { color: var(--texte-attenue); font-size: 0.9em; }

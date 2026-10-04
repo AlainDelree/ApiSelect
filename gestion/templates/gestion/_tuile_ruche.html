@@ -1,0 +1,24 @@
+{% load gestion_extras %}
+{% with ruche=tuile.ruche colonie=tuile.colonie %}
+{% if colonie %}<a class="tuile" href="{% url 'gestion:fiche_colonie' colonie.id %}"{% if ruche.couleur %} style="--couleur-ruche: {{ ruche.couleur }};"{% endif %}>
+{% else %}<div class="tuile tuile-vide"{% if ruche.couleur %} style="--couleur-ruche: {{ ruche.couleur }};"{% endif %}>
+{% endif %}
+    <div class="tuile-bande"></div>
+    <div class="tuile-corps">
+        <p class="tuile-titre">{{ ruche.type_ruche.libelle_affichage }} {{ ruche.numero }}</p>
+        <p class="tuile-type">{{ ruche.type_ruche.nom }}</p>
+        {% if colonie %}
+            {% if colonie.reine_actuelle %}
+            <p class="tuile-reine">
+                <span class="pastille-marquage" style="--couleur-marquage: {{ colonie.reine_actuelle.couleur_marquage|couleur_marquage }};"></span>
+                {{ colonie.reine_actuelle.identifiant }}
+            </p>
+            {% else %}
+            <p class="tuile-reine tuile-reine-absente">Reine non renseignée</p>
+            {% endif %}
+        {% else %}
+            <p class="tuile-statut">Vide</p>
+        {% endif %}
+    </div>
+{% if colonie %}</a>{% else %}</div>{% endif %}
+{% endwith %}

@@ -86,6 +86,12 @@ class Ruche(models.Model):
                    "remplacée...). Permet la réutilisation du numéro pour "
                    "les types Apidea/DH sans supprimer l'historique.",
     )
+    couleur = models.CharField(
+        max_length=7, blank=True, default="",
+        help_text="Couleur hexadécimale réelle de la ruche telle que "
+                   "peinte (ex. #3f8f3f). Laisser vide si inconnue ou non "
+                   "peinte (issue #41).",
+    )
     notes = models.TextField(blank=True)
 
     class Meta:

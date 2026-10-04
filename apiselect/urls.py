@@ -16,12 +16,13 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import include, path
-from django.views.generic import RedirectView
 
 from selection.views import admin_index_avec_tableau
 
 urlpatterns = [
-    path('', RedirectView.as_view(url='/admin/', permanent=False)),
+    # Écran d'accueil visuel de gestion du rucher (issue #41), à la
+    # place de l'ancienne redirection directe vers l'admin.
+    path('', include('gestion.urls')),
     # Intercepte uniquement l'URL exacte 'admin/' pour y afficher le
     # tableau de résultats de sélection (issue #38) ; toutes les autres
     # URL admin/... retombent sur admin.site.urls juste après, inchangé.

@@ -41,11 +41,23 @@ class TypeRucheAdmin(admin.ModelAdmin):
 
 @admin.register(Ruche)
 class RucheAdmin(admin.ModelAdmin):
-    list_display = ["__str__", "type_ruche", "numero", "rucher", "actif"]
+    """Le champ `couleur` (issue #41) reste un simple champ texte côté
+    formulaire — un <input type="color"> natif comme widget direct
+    imposerait une valeur par défaut #000000 dès le moindre enregistrement
+    sans y toucher (le champ ne peut pas rester vide dans ce type HTML),
+    ce qui écraserait silencieusement « couleur inconnue » par du noir.
+    Le sélecteur natif est donc ajouté en complément visuel par JS
+    (`couleur_ruche.js`), synchronisé avec le champ texte réel mais sans
+    jamais forcer de valeur si l'utilisateur n'y touche pas."""
+
+    list_display = ["__str__", "type_ruche", "numero", "rucher", "couleur", "actif"]
     list_filter = ["type_ruche", "rucher", "actif"]
     list_editable = ["actif"]
     search_fields = ["numero"]
     autocomplete_fields = ["type_ruche"]
+
+    class Media:
+        js = ["selection/admin/couleur_ruche.js"]
 
 
 @admin.register(StationFecondation)

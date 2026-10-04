@@ -1,0 +1,44 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Gestion du rucher — ApiSelect</title>
+    <link rel="stylesheet" href="{% static 'gestion/style.css' %}">
+</head>
+<body{% if BASE_DE_TEST_ACTIVE %} class="avec-bandeau"{% endif %}>
+    {% if BASE_DE_TEST_ACTIVE %}
+    <div class="bandeau-base-test">⚠️ BASE DE TEST — données fictives</div>
+    {% endif %}
+
+    <header class="en-tete">
+        <h1>Gestion du rucher</h1>
+        <p class="compteurs">
+            {{ nb_colonies_actives }} colonie{{ nb_colonies_actives|pluralize }} active{{ nb_colonies_actives|pluralize }}
+            ·
+            {{ nb_ruchers }} rucher{{ nb_ruchers|pluralize }}
+        </p>
+        <p class="lien-admin"><a href="{% url 'admin:index' %}">Administration &rarr;</a></p>
+    </header>
+
+    {% if not sections %}
+        <p class="message-vide">Aucun rucher enregistré pour l'instant.</p>
+    {% endif %}
+
+    {% for section in sections %}
+    <section class="rucher">
+        <h2>{{ section.rucher.nom }}</h2>
+        {% if not section.tuiles %}
+            <p class="message-vide">Aucune ruche active dans ce rucher.</p>
+        {% else %}
+        <div class="grille-tuiles">
+            {% for tuile in section.tuiles %}
+                {% include "gestion/_tuile_ruche.html" with tuile=tuile %}
+            {% endfor %}
+        </div>
+        {% endif %}
+    </section>
+    {% endfor %}
+</body>
+</html>
