@@ -1198,6 +1198,63 @@ class FichesTerrainPdfTests(TestCase):
         html_genere = creer_pdf_mock.call_args.args[0]
         self.assertIn("landscape", html_genere)
 
+    def test_fiche_rapide_titres_courts_lignee_et_tenue(self):
+        # Issue #44 : titres de colonnes raccourcis sur les fiches papier
+        # ("Lignée" et non "Lignée reine", "Tenue" et non "Tenue au
+        # cadre") — sans toucher ni aux données ni au nom du critère en
+        # admin (CritereSelection.nom reste "Tenue au cadre").
+        self._creer_colonie(1)
+
+        with mock.patch("selection.views.pisa.CreatePDF") as creer_pdf_mock:
+            creer_pdf_mock.return_value = mock.Mock(err=False)
+            self.client.get(reverse("selection:fiche_rapide"))
+
+        html_genere = creer_pdf_mock.call_args.args[0]
+        self.assertIn("Lignée", html_genere)
+        self.assertNotIn("Lignée reine", html_genere)
+        self.assertIn("Tenue", html_genere)
+        self.assertNotIn("Tenue au cadre", html_genere)
+        self.assertEqual(
+            CritereSelection.objects.get(code="TENUE_CADRE").nom, "Tenue au cadre",
+        )
+
+    def test_fiche_approfondie_titre_court_lignee(self):
+        colonie = self._creer_colonie(1)
+
+        with mock.patch("selection.views.pisa.CreatePDF") as creer_pdf_mock:
+            creer_pdf_mock.return_value = mock.Mock(err=False)
+            self.client.post(
+                reverse("selection:fiche_approfondie_pdf"),
+                {"campagne": self.campagne.id, "colonies": [colonie.id]},
+            )
+
+        html_genere = creer_pdf_mock.call_args.args[0]
+        self.assertIn("Lignée", html_genere)
+        self.assertNotIn("Lignée reine", html_genere)
+
+    def test_fiches_pdf_pas_de_tiret_si_lignee_inconnue(self):
+        # Issue #44 : plus de "—" dans la cellule Lignée quand la reine
+        # n'a pas de lignée connue — la cellule reste simplement vide.
+        # (le titre de la fiche contient lui-même un tiret cadratin, d'où
+        # une vérification ciblée sur la cellule plutôt que sur tout le
+        # HTML.)
+        colonie = self._creer_colonie(1)  # sans reine -> lignee ""
+
+        with mock.patch("selection.views.pisa.CreatePDF") as creer_pdf_mock:
+            creer_pdf_mock.return_value = mock.Mock(err=False)
+            self.client.get(reverse("selection:fiche_rapide"))
+        self.assertIn('class="col-lignee"></td>', creer_pdf_mock.call_args.args[0])
+        self.assertNotIn('class="col-lignee">—</td>', creer_pdf_mock.call_args.args[0])
+
+        with mock.patch("selection.views.pisa.CreatePDF") as creer_pdf_mock:
+            creer_pdf_mock.return_value = mock.Mock(err=False)
+            self.client.post(
+                reverse("selection:fiche_approfondie_pdf"),
+                {"campagne": self.campagne.id, "colonies": [colonie.id]},
+            )
+        self.assertIn('class="col-lignee"></td>', creer_pdf_mock.call_args.args[0])
+        self.assertNotIn('class="col-lignee">—</td>', creer_pdf_mock.call_args.args[0])
+
 
 class ReineAdminAutocompletionAnneeTests(TestCase):
     """Le formulaire admin de Reine charge le script JS d'auto-complétion

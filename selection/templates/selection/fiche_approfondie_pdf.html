@@ -51,9 +51,9 @@
             <thead>
                 <tr>
                     <th class="col-colonie">Colonie</th>
-                    <th class="col-lignee">Lignée reine</th>
+                    <th class="col-lignee">Lignée</th>
                     {% for critere in criteres %}
-                        <th class="col-critere">{{ critere.nom }}{% if critere.unite %} ({{ critere.unite }}){% endif %}</th>
+                        <th class="col-critere">{{ critere.titre_pdf }}{% if critere.unite %} ({{ critere.unite }}){% endif %}</th>
                     {% endfor %}
                 </tr>
             </thead>
@@ -61,7 +61,7 @@
                 {% for ligne in lignes %}
                     <tr>
                         <td class="col-colonie">{{ ligne.colonie.ruche_identifiant }}</td>
-                        <td class="col-lignee">{{ ligne.lignee|default:"—" }}</td>
+                        <td class="col-lignee">{{ ligne.lignee }}</td>
                         {% for critere in criteres %}
                             <td class="col-critere valeur-brute"></td>
                         {% endfor %}
