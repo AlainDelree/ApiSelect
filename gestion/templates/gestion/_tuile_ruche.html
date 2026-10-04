@@ -11,12 +11,23 @@
         <p class="tuile-type">{{ ruche.type_ruche.nom }}</p>
         {% if colonie %}
             {% if colonie.reine_actuelle %}
-            <p class="tuile-reine">
+            <p class="tuile-reine{% if tuile.observation_reine_morte_confirmee %} tuile-reine-morte{% endif %}">
                 <span class="pastille-marquage" style="--couleur-marquage: {{ colonie.reine_actuelle.couleur_marquage|couleur_marquage }};"></span>
                 {{ colonie.reine_actuelle.identifiant }}
+                {% if tuile.observation_reine_morte_confirmee %}<span class="etiquette-morte">(morte)</span>{% endif %}
             </p>
             {% else %}
             <p class="tuile-reine tuile-reine-absente">Reine non renseignée</p>
+            {% endif %}
+            {% if tuile.observation_reine_morte_confirmee %}
+            <p class="tuile-signal-reine-morte" role="img" aria-label="Reine morte confirmée, aucune remplaçante enregistrée">
+                <svg class="icone-reine-morte" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+                    <path d="M3 18 L5 8 L9 13 L12 6 L15 13 L19 8 L21 18 Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+                    <line x1="3" y1="21" x2="21" y2="21" stroke="currentColor" stroke-width="1.6"/>
+                    <line x1="2" y1="21" x2="22" y2="3" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+                </svg>
+                <span>Reine morte</span>
+            </p>
             {% endif %}
             <p class="tuile-derniere-visite">
                 {% if tuile.derniere_visite %}

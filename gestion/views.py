@@ -13,7 +13,7 @@ from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
-from selection.models import Colonie, Ruche, Rucher
+from selection.models import Colonie, EvenementColonie, Ruche, Rucher, TypeEvenementColonie
 
 from .forms import RevisiteReineMorteForm, VisiteForm, initial_observations_depuis_visite
 from .models import (
@@ -37,6 +37,34 @@ def _observation_reine_morte_ouverte(colonie):
         .select_related("rappel")
         .first()
     )
+
+
+def _observation_reine_morte_confirmee_sans_remplacement(colonie):
+    """Dernière observation « reine morte » confirmée de cette colonie,
+    s'il n'y a pas de remérage (`EvenementColonie`) enregistré à une
+    date égale ou postérieure à la visite où elle a été constatée —
+    sert au signal de couronne barrée sur la tuile et à la mention sur
+    la fiche colonie (issue #50). Une observation infirmée ou
+    supprimée ne ressort plus ici (filtrée par son statut), donc le
+    signal disparaît avec elle."""
+    observation = (
+        ObservationVisite.objects.filter(
+            colonie=colonie,
+            type_observation=TypeObservationVisite.REINE_MORTE,
+            statut=StatutObservation.CONFIRMEE,
+        )
+        .select_related("visite")
+        .order_by("-visite__date", "-id")
+        .first()
+    )
+    if observation is None:
+        return None
+    remerage_depuis = EvenementColonie.objects.filter(
+        colonie=colonie,
+        type_evenement=TypeEvenementColonie.REMERAGE,
+        date__gte=observation.visite.date,
+    ).exists()
+    return None if remerage_depuis else observation
 
 
 def _cloturer_rappel(observation):
@@ -88,18 +116,23 @@ def accueil(request):
             derniere_visite = None
             jours_depuis_visite = None
             observations_ouvertes = []
+            observation_reine_morte_confirmee = None
             if colonie is not None:
                 visites = colonie.visites_prefetchees
                 derniere_visite = visites[0] if visites else None
                 if derniere_visite is not None:
                     jours_depuis_visite = (aujourdhui - derniere_visite.date).days
                 observations_ouvertes = colonie.observations_ouvertes_liste
+                observation_reine_morte_confirmee = (
+                    _observation_reine_morte_confirmee_sans_remplacement(colonie)
+                )
             tuiles.append({
                 "ruche": ruche,
                 "colonie": colonie,
                 "derniere_visite": derniere_visite,
                 "jours_depuis_visite": jours_depuis_visite,
                 "observations_ouvertes": observations_ouvertes,
+                "observation_reine_morte_confirmee": observation_reine_morte_confirmee,
             })
         sections.append({"rucher": rucher, "tuiles": tuiles})
 
@@ -149,6 +182,9 @@ def fiche_colonie(request, colonie_id):
         "evenements": colonie.evenements.all(),
         "visites": colonie.visites.all(),
         "observations_ouvertes": observations_ouvertes,
+        "observation_reine_morte_confirmee": (
+            _observation_reine_morte_confirmee_sans_remplacement(colonie)
+        ),
     })
 
 

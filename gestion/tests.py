@@ -1216,3 +1216,224 @@ class SupprimerVisiteTests(TestCase):
         self.assertFalse(ObservationVisite.objects.filter(id=self.observation.id).exists())
         self.assertFalse(RappelRevisite.objects.filter(id=self.rappel_id).exists())
         self.assertFalse(ActionVisite.objects.filter(visite_id=self.visite.id).exists())
+
+
+class AffichageObservationsTests(TestCase):
+    """Affichage des observations dans l'historique des visites : la
+    certitude (constaté/doute) n'a de sens que pour une observation
+    encore ouverte — confirmée ou infirmée, c'est le statut qui prime,
+    pas la certitude d'origine (issue #50)."""
+
+    def setUp(self):
+        self.rucher = Rucher.objects.create(nom="Rucher affichage observations")
+        self.type_ruche = TypeRuche.objects.get(code="DADANT10")
+        self.ruche = Ruche.objects.create(
+            type_ruche=self.type_ruche, numero=100, rucher=self.rucher,
+        )
+        self.colonie = Colonie.objects.create(
+            ruche=self.ruche, mode_creation=ModeCreationColonie.ACHAT, active=True,
+        )
+        self.visite = Visite.objects.create(colonie=self.colonie, date="2026-08-01")
+
+    def _historique(self):
+        return self.client.get(
+            reverse("gestion:fiche_colonie", args=[self.colonie.id])
+        )
+
+    def test_observation_ouverte_affichee_avec_sa_certitude(self):
+        ObservationVisite.objects.create(
+            visite=self.visite, colonie=self.colonie,
+            type_observation=TypeObservationVisite.PILLAGE,
+            certitude=CertitudeObservation.DOUTE,
+        )
+
+        reponse = self._historique()
+
+        self.assertContains(reponse, "Pillage")
+        self.assertContains(reponse, "(doute)")
+
+    def test_observation_confirmee_affichee_sans_doute(self):
+        observation = ObservationVisite.objects.create(
+            visite=self.visite, colonie=self.colonie,
+            type_observation=TypeObservationVisite.REINE_MORTE,
+            certitude=CertitudeObservation.DOUTE,
+        )
+        observation.confirmer()
+
+        reponse = self._historique()
+
+        self.assertContains(reponse, "(confirmée)")
+        self.assertNotContains(reponse, "doute")
+
+    def test_observation_infirmee_attenuee_et_sans_mention_de_certitude(self):
+        observation = ObservationVisite.objects.create(
+            visite=self.visite, colonie=self.colonie,
+            type_observation=TypeObservationVisite.FRELONS,
+            certitude=CertitudeObservation.CONSTATE,
+        )
+        observation.infirmer()
+
+        reponse = self._historique()
+
+        self.assertContains(reponse, "(infirmée)")
+        self.assertContains(reponse, "statut-infirmee")
+        self.assertNotContains(reponse, "constaté")
+
+    def test_confirmation_depuis_la_fiche_fixe_la_certitude_a_constate(self):
+        observation = ObservationVisite.objects.create(
+            visite=self.visite, colonie=self.colonie,
+            type_observation=TypeObservationVisite.PILLAGE,
+            certitude=CertitudeObservation.DOUTE,
+        )
+
+        self.client.post(
+            reverse("gestion:confirmer_observation", args=[observation.id])
+        )
+
+        observation.refresh_from_db()
+        self.assertEqual(observation.certitude, CertitudeObservation.CONSTATE)
+
+    def test_confirmation_par_visite_suivante_fixe_aussi_la_certitude(self):
+        observation = ObservationVisite.objects.create(
+            visite=self.visite, colonie=self.colonie,
+            type_observation=TypeObservationVisite.REINE_MORTE,
+            certitude=CertitudeObservation.DOUTE,
+        )
+
+        self.client.post(
+            reverse("gestion:nouvelle_visite", args=[self.colonie.id]),
+            {"date": "2026-08-10", "couvain_ouvert_present": "non"},
+        )
+
+        observation.refresh_from_db()
+        self.assertEqual(observation.statut, StatutObservation.CONFIRMEE)
+        self.assertEqual(observation.certitude, CertitudeObservation.CONSTATE)
+
+    def test_infirmation_garde_la_certitude_telle_quelle(self):
+        observation = ObservationVisite.objects.create(
+            visite=self.visite, colonie=self.colonie,
+            type_observation=TypeObservationVisite.ESSAIMAGE,
+            certitude=CertitudeObservation.DOUTE,
+        )
+
+        self.client.post(
+            reverse("gestion:infirmer_observation", args=[observation.id])
+        )
+
+        observation.refresh_from_db()
+        self.assertEqual(observation.certitude, CertitudeObservation.DOUTE)
+
+
+class SignalReineMorteTests(TestCase):
+    """Couronne barrée sur la tuile et mention sur la fiche colonie pour
+    une reine morte confirmée sans remplaçante enregistrée depuis
+    (issue #50)."""
+
+    def setUp(self):
+        self.rucher = Rucher.objects.create(nom="Rucher signal reine morte")
+        self.type_ruche = TypeRuche.objects.get(code="DADANT10")
+        self.ruche = Ruche.objects.create(
+            type_ruche=self.type_ruche, numero=110, rucher=self.rucher,
+        )
+        self.reine = Reine.objects.create(identifiant="R-SIGNAL-1")
+        self.colonie = Colonie.objects.create(
+            ruche=self.ruche, reine_actuelle=self.reine,
+            mode_creation=ModeCreationColonie.ACHAT, active=True,
+        )
+
+    def _confirmer_reine_morte(self, date_visite):
+        visite = Visite.objects.create(colonie=self.colonie, date=date_visite)
+        observation = ObservationVisite.objects.create(
+            visite=visite, colonie=self.colonie,
+            type_observation=TypeObservationVisite.REINE_MORTE,
+            certitude=CertitudeObservation.DOUTE,
+        )
+        observation.confirmer()
+        return observation
+
+    def test_signal_affiche_sur_la_tuile_et_la_fiche(self):
+        self._confirmer_reine_morte("2026-09-01")
+
+        accueil = self.client.get(reverse("gestion:accueil"))
+        fiche = self.client.get(
+            reverse("gestion:fiche_colonie", args=[self.colonie.id])
+        )
+
+        self.assertContains(accueil, "icone-reine-morte")
+        self.assertContains(accueil, "Reine morte")
+        self.assertContains(accueil, "(morte)")
+        self.assertContains(fiche, "Reine morte confirmée le")
+
+    def test_pas_de_signal_pour_observation_ouverte(self):
+        visite = Visite.objects.create(colonie=self.colonie, date="2026-09-02")
+        ObservationVisite.objects.create(
+            visite=visite, colonie=self.colonie,
+            type_observation=TypeObservationVisite.REINE_MORTE,
+            certitude=CertitudeObservation.DOUTE,
+        )
+
+        accueil = self.client.get(reverse("gestion:accueil"))
+
+        self.assertNotContains(accueil, "icone-reine-morte")
+
+    def test_pas_de_signal_pour_observation_infirmee(self):
+        visite = Visite.objects.create(colonie=self.colonie, date="2026-09-03")
+        observation = ObservationVisite.objects.create(
+            visite=visite, colonie=self.colonie,
+            type_observation=TypeObservationVisite.REINE_MORTE,
+            certitude=CertitudeObservation.DOUTE,
+        )
+        observation.infirmer()
+
+        accueil = self.client.get(reverse("gestion:accueil"))
+
+        self.assertNotContains(accueil, "icone-reine-morte")
+
+    def test_signal_absent_apres_remerage_a_la_meme_date(self):
+        self._confirmer_reine_morte("2026-09-04")
+        EvenementColonie.objects.create(
+            colonie=self.colonie, date="2026-09-04",
+            type_evenement=TypeEvenementColonie.REMERAGE,
+        )
+
+        fiche = self.client.get(
+            reverse("gestion:fiche_colonie", args=[self.colonie.id])
+        )
+
+        self.assertNotContains(fiche, "Reine morte confirmée le")
+
+    def test_signal_absent_apres_remerage_posterieur(self):
+        self._confirmer_reine_morte("2026-09-05")
+        EvenementColonie.objects.create(
+            colonie=self.colonie, date="2026-09-10",
+            type_evenement=TypeEvenementColonie.REMERAGE,
+        )
+
+        fiche = self.client.get(
+            reverse("gestion:fiche_colonie", args=[self.colonie.id])
+        )
+
+        self.assertNotContains(fiche, "Reine morte confirmée le")
+
+    def test_signal_present_si_remerage_anterieur(self):
+        self._confirmer_reine_morte("2026-09-15")
+        EvenementColonie.objects.create(
+            colonie=self.colonie, date="2026-09-10",
+            type_evenement=TypeEvenementColonie.REMERAGE,
+        )
+
+        fiche = self.client.get(
+            reverse("gestion:fiche_colonie", args=[self.colonie.id])
+        )
+
+        self.assertContains(fiche, "Reine morte confirmée le")
+
+    def test_colonie_sans_observation_sans_erreur(self):
+        accueil = self.client.get(reverse("gestion:accueil"))
+        fiche = self.client.get(
+            reverse("gestion:fiche_colonie", args=[self.colonie.id])
+        )
+
+        self.assertEqual(accueil.status_code, 200)
+        self.assertEqual(fiche.status_code, 200)
+        self.assertNotContains(fiche, "Reine morte confirmée le")

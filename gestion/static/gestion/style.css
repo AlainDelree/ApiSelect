@@ -121,6 +121,15 @@ a.tuile:hover {
     font-size: 0.9em; margin: 0;
 }
 .tuile-reine-absente { color: var(--texte-attenue); font-style: italic; }
+.tuile-reine-morte { color: var(--texte-attenue); }
+.tuile-reine-morte .pastille-marquage { opacity: 0.5; }
+.etiquette-morte { font-style: italic; }
+
+.tuile-signal-reine-morte {
+    display: flex; align-items: center; gap: 0.35em;
+    font-size: 0.85em; font-weight: bold; color: #c62828; margin: 0.3em 0 0;
+}
+.icone-reine-morte { color: #c62828; flex: 0 0 auto; }
 .tuile-statut {
     color: var(--texte-attenue); font-weight: bold;
     text-transform: uppercase; letter-spacing: 0.05em;
@@ -136,6 +145,7 @@ a.tuile:hover {
 }
 
 .message-vide { color: var(--texte-attenue); font-style: italic; }
+.signal-reine-morte { color: #c62828; font-weight: bold; margin: 0.6em 0 0; }
 
 .fiche-bloc {
     margin-bottom: 1.5em;
@@ -228,6 +238,7 @@ dd { margin: 0; }
 }
 .tag-observation.certitude-doute { background: #f5a623; color: #fff; }
 .tag-observation.certitude-constate { background: #d9534f; color: #fff; }
+.tag-observation.statut-infirmee { background: var(--fond-vide); color: var(--texte-attenue); opacity: 0.75; }
 
 .bloc-observations-ouvertes .observation-ouverte {
     padding: 0.8em; margin-bottom: 0.8em; border: 1px solid var(--bordure);

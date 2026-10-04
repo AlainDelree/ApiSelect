@@ -69,6 +69,11 @@
         {% else %}
         <p class="message-vide">Aucune reine renseignée pour cette colonie.</p>
         {% endif %}
+        {% if observation_reine_morte_confirmee %}
+        <p class="signal-reine-morte">
+            Reine morte confirmée le {{ observation_reine_morte_confirmee.visite.date }}
+        </p>
+        {% endif %}
     </section>
 
     <section class="fiche-bloc">
@@ -140,9 +145,9 @@
                     <li class="tag-action">{{ action.get_type_action_display }}</li>
                     {% endfor %}
                     {% for observation in visite.observations.all %}
-                    <li class="tag-observation certitude-{{ observation.certitude|lower }}">
+                    <li class="tag-observation certitude-{{ observation.certitude|lower }} statut-{{ observation.statut|lower }}">
                         {{ observation.get_type_observation_display }}
-                        ({{ observation.get_certitude_display|lower }} — {{ observation.get_statut_display|lower }})
+                        ({{ observation.libelle_statut_affichage }})
                     </li>
                     {% endfor %}
                 </ul>

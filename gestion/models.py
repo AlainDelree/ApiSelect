@@ -178,12 +178,28 @@ class ObservationVisite(models.Model):
         )
 
     def confirmer(self):
+        """Une fois confirmée, le doute initial est levé : la
+        certitude passe à « constaté » pour garder des données
+        cohérentes (une observation confirmée ne peut plus être « en
+        doute », issue #50)."""
         self.statut = StatutObservation.CONFIRMEE
-        self.save(update_fields=["statut"])
+        self.certitude = CertitudeObservation.CONSTATE
+        self.save(update_fields=["statut", "certitude"])
 
     def infirmer(self):
         self.statut = StatutObservation.INFIRMEE
         self.save(update_fields=["statut"])
+
+    def libelle_statut_affichage(self):
+        """Partie affichée après le type d'observation, dans
+        l'historique des visites et la fiche colonie (issue #50) : la
+        certitude au moment de l'observation (constaté/doute) n'a de
+        sens que tant qu'elle reste ouverte — une fois confirmée ou
+        infirmée, c'est le statut qui prime, pas la certitude
+        d'origine."""
+        if self.statut == StatutObservation.OUVERTE:
+            return self.get_certitude_display().lower()
+        return self.get_statut_display().lower()
 
     def save(self, *args, **kwargs):
         """La colonie d'une observation est toujours celle de sa
