@@ -19,6 +19,7 @@ from selection.models import (
     TypeRuche,
 )
 
+from .affichage import COULEUR_GRISE_PAR_DEFAUT, bande_ruche
 from .models import (
     DELAI_RAPPEL_REINE_MORTE_JOURS,
     ActionVisite,
@@ -106,6 +107,143 @@ class AccueilVisuelTests(TestCase):
         reponse = self.client.get(reverse("gestion:accueil"))
 
         self.assertNotContains(reponse, "Ruche 5")
+
+
+class BandeRucheTests(TestCase):
+    """Bande de couleur des tuiles et de la fiche colonie (issue #47) :
+    largeur proportionnelle au nombre de cadres du type de ruche,
+    centrée entre deux bandes blanches égales, gris par défaut sans
+    couleur renseignée, pleine largeur si le nombre de cadres est
+    inconnu ou atteint 10."""
+
+    def setUp(self):
+        self.rucher = Rucher.objects.create(nom="Rucher bandes")
+        self.type_dadant = TypeRuche.objects.get(code="DADANT10")
+        self.type_ruchette = TypeRuche.objects.get(code="RUCHETTE6")
+
+    def test_dix_cadres_bande_pleine_largeur(self):
+        self.type_dadant.nombre_cadres = 10
+        self.type_dadant.save()
+        ruche = Ruche.objects.create(
+            type_ruche=self.type_dadant, numero=101, rucher=self.rucher,
+            couleur="#3f8f3f",
+        )
+
+        bande = bande_ruche(ruche)
+
+        self.assertEqual(bande["largeur_pourcent"], 100)
+        self.assertEqual(bande["marge_pourcent"], 0)
+
+    def test_ruchette_six_cadres_proportion_centree(self):
+        self.type_ruchette.nombre_cadres = 6
+        self.type_ruchette.save()
+        ruche = Ruche.objects.create(
+            type_ruche=self.type_ruchette, numero=102, rucher=self.rucher,
+            couleur="#1e88e5",
+        )
+
+        bande = bande_ruche(ruche)
+
+        self.assertEqual(bande["largeur_pourcent"], 60)
+        self.assertEqual(bande["marge_pourcent"], 20)
+        # Les deux bandes blanches (une de chaque côté) sont égales.
+        self.assertEqual(bande["marge_pourcent"] * 2 + bande["largeur_pourcent"], 100)
+
+    def test_nombre_de_cadres_inconnu_bande_pleine_largeur(self):
+        # self.type_dadant.nombre_cadres reste vide : comportement par
+        # défaut juste après la migration additive, avant saisie
+        # manuelle dans l'admin.
+        ruche = Ruche.objects.create(
+            type_ruche=self.type_dadant, numero=103, rucher=self.rucher,
+        )
+
+        bande = bande_ruche(ruche)
+
+        self.assertEqual(bande["largeur_pourcent"], 100)
+        self.assertEqual(bande["marge_pourcent"], 0)
+
+    def test_ruche_sans_couleur_gris_par_defaut(self):
+        ruche = Ruche.objects.create(
+            type_ruche=self.type_dadant, numero=104, rucher=self.rucher,
+        )
+
+        bande = bande_ruche(ruche)
+
+        self.assertEqual(bande["couleur"], COULEUR_GRISE_PAR_DEFAUT)
+
+    def test_couleur_videe_retombe_sur_le_gris_par_defaut(self):
+        ruche = Ruche.objects.create(
+            type_ruche=self.type_dadant, numero=105, rucher=self.rucher,
+            couleur="#3f8f3f",
+        )
+        ruche.couleur = ""
+        ruche.save()
+
+        bande = bande_ruche(ruche)
+
+        self.assertEqual(bande["couleur"], COULEUR_GRISE_PAR_DEFAUT)
+
+    def test_libelle_accessible_mentionne_type_cadres_et_couleur(self):
+        self.type_ruchette.nombre_cadres = 6
+        self.type_ruchette.save()
+        ruche = Ruche.objects.create(
+            type_ruche=self.type_ruchette, numero=106, rucher=self.rucher,
+            couleur="#1e88e5",
+        )
+
+        bande = bande_ruche(ruche)
+
+        self.assertIn("Ruchette", bande["libelle"])
+        self.assertIn("6 cadre", bande["libelle"])
+        self.assertIn("bleue", bande["libelle"])
+
+    def test_bande_ruchette_affichee_sur_la_tuile_accueil(self):
+        self.type_ruchette.nombre_cadres = 6
+        self.type_ruchette.save()
+        ruche = Ruche.objects.create(
+            type_ruche=self.type_ruchette, numero=107, rucher=self.rucher,
+            couleur="#1e88e5",
+        )
+        Colonie.objects.create(
+            ruche=ruche, mode_creation=ModeCreationColonie.ACHAT, active=True,
+        )
+
+        reponse = self.client.get(reverse("gestion:accueil"))
+
+        self.assertContains(reponse, "width: 60%")
+        self.assertContains(reponse, "left: 20%")
+
+    def test_ruche_sans_colonie_active_toujours_marquee_vide(self):
+        self.type_dadant.nombre_cadres = 10
+        self.type_dadant.save()
+        Ruche.objects.create(
+            type_ruche=self.type_dadant, numero=108, rucher=self.rucher,
+            couleur="#3f8f3f",
+        )
+
+        reponse = self.client.get(reverse("gestion:accueil"))
+
+        self.assertContains(reponse, "Vide")
+        self.assertContains(reponse, "tuile-vide")
+
+    def test_fiche_colonie_affiche_la_meme_bande(self):
+        self.type_ruchette.nombre_cadres = 6
+        self.type_ruchette.save()
+        ruche = Ruche.objects.create(
+            type_ruche=self.type_ruchette, numero=109, rucher=self.rucher,
+            couleur="#1e88e5",
+        )
+        colonie = Colonie.objects.create(
+            ruche=ruche, mode_creation=ModeCreationColonie.ACHAT, active=True,
+        )
+
+        reponse = self.client.get(
+            reverse("gestion:fiche_colonie", args=[colonie.id])
+        )
+
+        self.assertContains(reponse, "fiche-bande")
+        self.assertContains(reponse, "width: 60%")
+        self.assertContains(reponse, "left: 20%")
 
 
 class FicheColonieTests(TestCase):

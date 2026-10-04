@@ -1,9 +1,11 @@
 {% load gestion_extras %}
-{% with ruche=tuile.ruche colonie=tuile.colonie %}
-{% if colonie %}<a class="tuile" href="{% url 'gestion:fiche_colonie' colonie.id %}"{% if ruche.couleur %} style="--couleur-ruche: {{ ruche.couleur }};"{% endif %}>
-{% else %}<div class="tuile tuile-vide"{% if ruche.couleur %} style="--couleur-ruche: {{ ruche.couleur }};"{% endif %}>
+{% with ruche=tuile.ruche colonie=tuile.colonie bande=tuile.ruche|bande_ruche %}
+{% if colonie %}<a class="tuile" href="{% url 'gestion:fiche_colonie' colonie.id %}" style="--couleur-ruche: {{ bande.couleur }};">
+{% else %}<div class="tuile tuile-vide" style="--couleur-ruche: {{ bande.couleur }};">
 {% endif %}
-    <div class="tuile-bande"></div>
+    <div class="tuile-bande" role="img" aria-label="{{ bande.libelle }}">
+        <div class="tuile-bande-couleur" style="left: {{ bande.marge_pourcent }}%; width: {{ bande.largeur_pourcent }}%;"></div>
+    </div>
     <div class="tuile-corps">
         <p class="tuile-titre">{{ ruche.type_ruche.libelle_affichage }} {{ ruche.numero }}</p>
         <p class="tuile-type">{{ ruche.type_ruche.nom }}</p>

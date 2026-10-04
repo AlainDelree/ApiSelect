@@ -93,8 +93,24 @@ a.tuile:hover {
 }
 
 .tuile-bande {
-    height: 10px;
+    height: 34px;
+    background: #ffffff;
+    border-bottom: 1px solid var(--bordure);
+    position: relative;
+    overflow: hidden;
+}
+
+.tuile-bande-couleur {
+    position: absolute;
+    top: 0;
+    bottom: 0;
     background: var(--couleur-ruche, var(--couleur-neutre));
+}
+
+.fiche-bande {
+    margin: 0 0 1em;
+    border: 1px solid var(--bordure);
+    border-radius: 8px;
 }
 
 .tuile-corps { padding: 0.8em; }

@@ -14,6 +14,12 @@
 
     <p class="lien-retour"><a href="{% url 'gestion:accueil' %}">&larr; Retour à l'accueil</a></p>
 
+    {% with bande=colonie.ruche|bande_ruche %}
+    <div class="tuile-bande fiche-bande" role="img" aria-label="{{ bande.libelle }}" style="--couleur-ruche: {{ bande.couleur }};">
+        <div class="tuile-bande-couleur" style="left: {{ bande.marge_pourcent }}%; width: {{ bande.largeur_pourcent }}%;"></div>
+    </div>
+    {% endwith %}
+
     <h1>{{ colonie.ruche.type_ruche.libelle_affichage }} {{ colonie.ruche.numero }}</h1>
 
     <p>
@@ -28,14 +34,7 @@
             <dt>Type</dt><dd>{{ colonie.ruche.type_ruche.nom }}</dd>
             <dt>Numéro</dt><dd>{{ colonie.ruche.numero }}</dd>
             <dt>Couleur</dt>
-            <dd>
-                {% if colonie.ruche.couleur %}
-                    <span class="pastille-ruche" style="--couleur-ruche: {{ colonie.ruche.couleur }};"></span>
-                    {{ colonie.ruche.couleur }}
-                {% else %}
-                    non renseignée
-                {% endif %}
-            </dd>
+            <dd>{{ colonie.ruche.couleur|default:"non renseignée" }}</dd>
             <dt>Rucher</dt><dd>{{ colonie.ruche.rucher|default:"non assigné" }}</dd>
         </dl>
     </section>

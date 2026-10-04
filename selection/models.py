@@ -54,6 +54,15 @@ class TypeRuche(models.Model):
                    "une numérotation réutilisable sans identité permanente "
                    "sur les planches, comme Apidea/DH.",
     )
+    nombre_cadres = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        validators=[MinValueValidator(1)],
+        help_text="Nombre de cadres de ce type de ruche (ex. 10 pour une "
+                   "Dadant 10, 6 pour une ruchette). Laisser vide si "
+                   "inconnu : la bande de couleur des tuiles et de la "
+                   "fiche colonie s'affiche alors pleine largeur — la "
+                   "valeur n'est jamais déduite du nom du type (issue #47).",
+    )
 
     class Meta:
         verbose_name = "Type de ruche"
