@@ -1,37 +1,111 @@
 #!/usr/bin/env bash
 #
 # apiselect — lance le serveur de développement Django d'ApiSelect et
-# ouvre automatiquement le navigateur sur /admin/, depuis n'importe
-# quel répertoire courant.
+# ouvre automatiquement le navigateur sur la racine du site, depuis
+# n'importe quel répertoire courant.
 #
 # Installation (accès global) : lien symbolique dans un dossier du
 # PATH, ex. ~/bin/apiselect -> ~/ApiSelect/bin/apiselect
 #
-# Usage : apiselect [--dev]
-#   --dev   cible la base de test 'apiselect_dev' (données fictives) au
-#           lieu de la vraie base, pour tester l'outil de bout en bout
-#           sans risque (cf. issue #12 et README.md). Applique les
-#           migrations sur apiselect_dev avant de lancer le serveur
-#           (sans effet si déjà à jour).
+# Usage :
+#   apiselect             même effet que --dev (défaut sûr)
+#   apiselect --dev       base de test 'apiselect_dev' (données
+#                         fictives), migrations appliquées
+#                         automatiquement avant de lancer le serveur
+#                         (cf. issue #12 et README.md)
+#   apiselect --prod      la vraie base 'apiselect', avec le rôle
+#                         'apiselect_prod' ; demande le mot de passe
+#                         au clavier (saisie masquée, jamais stocké
+#                         ni journalisé) ; aucune migration
+#                         automatique
+#   apiselect --prod --migrer
+#                         demande le mot de passe, affiche les
+#                         migrations qui seraient appliquées sur la
+#                         vraie base, demande confirmation ("oui"),
+#                         puis les applique — sans lancer de serveur
+#
 # Ctrl+C arrête proprement le serveur (pas de processus orphelin).
 
 set -euo pipefail
 
-PROJECT_DIR="/home/alain/ApiSelect"
+# Déduit le dossier du projet de l'emplacement réel de ce script, en
+# suivant le lien symbolique d'installation (pas de chemin en dur).
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+    DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+
 HOST="127.0.0.1"
 PORT="8000"
-URL="http://${HOST}:${PORT}/admin/"
+URL="http://${HOST}:${PORT}/"
 
-MODE_DEV=0
-if [ "${1:-}" = "--dev" ]; then
-    MODE_DEV=1
+MODE_PROD=0
+MODE_MIGRER=0
+for arg in "$@"; do
+    case "$arg" in
+        --dev) ;; # défaut, accepté explicitement pour compatibilité
+        --prod) MODE_PROD=1 ;;
+        --migrer) MODE_MIGRER=1 ;;
+        *)
+            echo "Usage : apiselect [--dev | --prod [--migrer]]" >&2
+            exit 1
+            ;;
+    esac
+done
+
+if [ "$MODE_MIGRER" -eq 1 ] && [ "$MODE_PROD" -eq 0 ]; then
+    echo "Erreur : --migrer n'est valable qu'avec --prod." >&2
+    exit 1
 fi
 
 cd "$PROJECT_DIR"
 # shellcheck source=/dev/null
 source "$PROJECT_DIR/venv/bin/activate"
 
-if [ "$MODE_DEV" -eq 1 ]; then
+# Supprime le mot de passe de l'environnement à la sortie du script,
+# quelle que soit l'issue (succès, erreur, Ctrl+C).
+trap 'unset DB_PASSWORD' EXIT
+
+if [ "$MODE_PROD" -eq 1 ]; then
+    echo "========================================================"
+    echo "  ⚠️  VRAIE BASE — connexion à 'apiselect' (données réelles)"
+    echo "========================================================"
+
+    read -r -s -p "Mot de passe PostgreSQL du rôle 'apiselect_prod' : " DB_PASSWORD
+    echo
+    export DB_PASSWORD
+    export DB_USER="apiselect_prod"
+    # DJANGO_DB_NAME n'est volontairement pas défini : le nom de base
+    # retombe sur DB_NAME/'apiselect' (vraie base), cf. settings.py.
+    # python-dotenv (load_dotenv, override=False par défaut) ne doit
+    # pas écraser DB_USER/DB_PASSWORD déjà exportés ici — vérifié dans
+    # apiselect/settings.py : charge .env puis lit os.environ.get(...).
+
+    if ! python manage.py shell -c "from django.db import connection; connection.ensure_connection()" >/dev/null 2>&1; then
+        echo "❌ Authentification refusée par PostgreSQL (mot de passe ou rôle 'apiselect_prod' incorrect). Arrêt." >&2
+        exit 1
+    fi
+
+    if [ "$MODE_MIGRER" -eq 1 ]; then
+        echo
+        echo "Migrations qui seraient appliquées sur la vraie base 'apiselect' :"
+        python manage.py migrate --plan
+        echo
+        echo "⚠️  Assurez-vous qu'une sauvegarde récente de la vraie base existe avant de continuer."
+        read -r -p "Tapez « oui » pour confirmer et appliquer ces migrations : " CONFIRMATION
+        if [ "$CONFIRMATION" != "oui" ]; then
+            echo "Confirmation non reçue : aucune migration appliquée."
+            exit 1
+        fi
+        python manage.py migrate --noinput
+        echo "Migrations appliquées sur la vraie base."
+        exit 0
+    fi
+else
     export DJANGO_DB_NAME="apiselect_dev"
     echo "⚠️  Mode DEV : base de données 'apiselect_dev' (données fictives)."
     python manage.py migrate --noinput
@@ -48,6 +122,7 @@ cleanup() {
         kill "$SERVER_PID" 2>/dev/null || true
         wait "$SERVER_PID" 2>/dev/null || true
     fi
+    unset DB_PASSWORD
 }
 trap cleanup EXIT INT TERM
 
