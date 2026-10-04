@@ -684,9 +684,10 @@ class ModeleObservationVisiteTests(TestCase):
 
 
 class AdminVisiteTests(TestCase):
-    """Ajout d'une visite avec observation « reine morte » en doute
-    depuis l'administration (issue #45) : plus d'erreur de contrainte
-    NOT NULL sur la colonie, rappel créé automatiquement."""
+    """Administration des visites, observations et rappels (issues #45
+    et #48) : plus aucun ajout possible (saisie réservée à l'interface
+    visuelle), mais consultation, correction et suppression encore
+    possibles à titre exceptionnel."""
 
     def setUp(self):
         self.superuser = get_user_model().objects.create_superuser(
@@ -703,54 +704,57 @@ class AdminVisiteTests(TestCase):
             ruche=self.ruche, mode_creation=ModeCreationColonie.ACHAT, active=True,
         )
 
-    def _donnees_formulaire(self, **observation_overrides):
-        donnees = {
-            "colonie": self.colonie.id,
-            "date": "2026-06-10",
-            "observation_reine": "",
-            "nb_cadres_couvain": "",
-            "nb_cadres_abeilles": "",
-            "reserves": "",
-            "comportement": "",
-            "notes": "",
-            "actions-TOTAL_FORMS": "0",
-            "actions-INITIAL_FORMS": "0",
-            "actions-MIN_NUM_FORMS": "0",
-            "actions-MAX_NUM_FORMS": "1000",
-            "observations-TOTAL_FORMS": "1",
-            "observations-INITIAL_FORMS": "0",
-            "observations-MIN_NUM_FORMS": "0",
-            "observations-MAX_NUM_FORMS": "1000",
-            "observations-0-type_observation": TypeObservationVisite.REINE_MORTE,
-            "observations-0-certitude": CertitudeObservation.DOUTE,
-            "observations-0-statut": StatutObservation.OUVERTE,
-            "observations-0-reponse_cellules_royales": "",
-            "_save": "Enregistrer",
-        }
-        donnees.update(observation_overrides)
-        return donnees
-
-    def test_ajout_visite_avec_reine_morte_en_doute_sans_erreur(self):
-        reponse = self.client.post(
-            reverse("admin:gestion_visite_add"), self._donnees_formulaire(),
+    def test_ajout_de_visite_refuse_dans_ladmin(self):
+        self.assertEqual(
+            self.client.get(reverse("admin:gestion_visite_add")).status_code, 403,
         )
 
-        self.assertEqual(reponse.status_code, 302)
-        visite = Visite.objects.get(colonie=self.colonie)
-        observation = ObservationVisite.objects.get(visite=visite)
-        self.assertEqual(observation.colonie_id, self.colonie.id)
+        reponse = self.client.post(reverse("admin:gestion_visite_add"), {
+            "colonie": self.colonie.id, "date": "2026-06-10",
+            "actions-TOTAL_FORMS": "0", "actions-INITIAL_FORMS": "0",
+            "actions-MIN_NUM_FORMS": "0", "actions-MAX_NUM_FORMS": "1000",
+            "observations-TOTAL_FORMS": "0", "observations-INITIAL_FORMS": "0",
+            "observations-MIN_NUM_FORMS": "0", "observations-MAX_NUM_FORMS": "1000",
+        })
+
+        self.assertEqual(reponse.status_code, 403)
+        self.assertFalse(Visite.objects.filter(colonie=self.colonie).exists())
+
+    def test_ajout_dobservation_et_de_rappel_refuses_dans_ladmin(self):
         self.assertEqual(
-            RappelRevisite.objects.filter(observation=observation).count(), 1,
+            self.client.get(reverse("admin:gestion_observationvisite_add")).status_code, 403,
         )
-        rappel = RappelRevisite.objects.get(observation=observation)
         self.assertEqual(
-            rappel.date_revisite,
-            date(2026, 6, 10) + timedelta(days=DELAI_RAPPEL_REINE_MORTE_JOURS),
+            self.client.get(reverse("admin:gestion_rappelrevisite_add")).status_code, 403,
+        )
+
+    def test_aucun_lien_ajouter_de_visite_sur_laccueil_admin(self):
+        reponse = self.client.get(reverse("admin:index"))
+
+        self.assertNotContains(reponse, reverse("admin:gestion_visite_add"))
+        self.assertNotContains(reponse, reverse("admin:gestion_observationvisite_add"))
+        self.assertNotContains(reponse, reverse("admin:gestion_rappelrevisite_add"))
+
+    def test_consultation_et_liste_toujours_disponibles(self):
+        visite = Visite.objects.create(colonie=self.colonie, date="2026-06-10")
+
+        self.assertEqual(
+            self.client.get(reverse("admin:gestion_visite_changelist")).status_code, 200,
+        )
+        self.assertEqual(
+            self.client.get(
+                reverse("admin:gestion_visite_change", args=[visite.id]),
+            ).status_code, 200,
         )
 
     def test_rappel_modifiable_apres_coup_dans_ladmin(self):
-        self.client.post(reverse("admin:gestion_visite_add"), self._donnees_formulaire())
-        rappel = RappelRevisite.objects.get(observation__visite__colonie=self.colonie)
+        visite = Visite.objects.create(colonie=self.colonie, date="2026-06-10")
+        observation = ObservationVisite.objects.create(
+            visite=visite, colonie=self.colonie,
+            type_observation=TypeObservationVisite.REINE_MORTE,
+            certitude=CertitudeObservation.DOUTE,
+        )
+        rappel = observation.rappel
 
         reponse = self.client.post(
             reverse("admin:gestion_rappelrevisite_change", args=[rappel.id]),
@@ -853,3 +857,243 @@ class HistoriqueVisitesAffichageTests(TestCase):
         self.assertNotContains(reponse, "Abeilles :")
         self.assertNotContains(reponse, "Réserves :")
         self.assertNotContains(reponse, "Comportement :")
+
+
+class ModifierVisiteTests(TestCase):
+    """Modification d'une visite existante, par le même formulaire à
+    boutons que la création — même gabarit, même classe de formulaire,
+    mêmes champs (issue #48)."""
+
+    def setUp(self):
+        self.rucher = Rucher.objects.create(nom="Rucher modification")
+        self.type_ruche = TypeRuche.objects.get(code="DADANT10")
+        self.ruche = Ruche.objects.create(
+            type_ruche=self.type_ruche, numero=80, rucher=self.rucher,
+        )
+        self.colonie = Colonie.objects.create(
+            ruche=self.ruche, mode_creation=ModeCreationColonie.ACHAT, active=True,
+        )
+
+    def _donnees_minimales(self, **extra):
+        donnees = {
+            "date": "2026-07-01",
+            "observation_reine": "",
+            "nb_cadres_couvain": "",
+            "nb_cadres_abeilles": "",
+            "reserves": "",
+            "comportement": "",
+            "notes": "",
+            "observation_essaimage": "",
+            "reponse_cellules_royales": "",
+            "observation_reine_morte": "",
+            "date_reverification_reine_morte": "",
+            "observation_pillage": "",
+            "observation_frelons": "",
+        }
+        donnees.update(extra)
+        return donnees
+
+    def test_formulaire_de_modification_prerempli(self):
+        visite = Visite.objects.create(
+            colonie=self.colonie, date="2026-07-01", observation_reine="OEUFS_VUS",
+            nb_cadres_couvain=6, notes="Belle colonie.",
+        )
+        ActionVisite.objects.create(visite=visite, type_action=TypeActionVisite.NOURRISSEMENT)
+
+        reponse = self.client.get(
+            reverse("gestion:modifier_visite", args=[self.colonie.id, visite.id])
+        )
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertContains(reponse, "Modifier la visite")
+        self.assertContains(reponse, "Belle colonie.")
+        self.assertContains(reponse, 'value="6"')
+
+    def test_formulaires_de_creation_et_de_modification_memes_champs(self):
+        visite = Visite.objects.create(colonie=self.colonie, date="2026-07-01")
+
+        reponse_creation = self.client.get(
+            reverse("gestion:nouvelle_visite", args=[self.colonie.id])
+        )
+        reponse_modification = self.client.get(
+            reverse("gestion:modifier_visite", args=[self.colonie.id, visite.id])
+        )
+
+        self.assertEqual(
+            set(reponse_creation.context["form"].fields),
+            set(reponse_modification.context["form"].fields),
+        )
+
+    def test_modification_avec_les_memes_champs_que_la_creation(self):
+        visite = Visite.objects.create(colonie=self.colonie, date="2026-07-01")
+
+        reponse = self.client.post(
+            reverse("gestion:modifier_visite", args=[self.colonie.id, visite.id]),
+            self._donnees_minimales(
+                date="2026-07-02", observation_reine="OEUFS_VUS",
+                nb_cadres_couvain="7", nb_cadres_abeilles="9",
+                reserves="BONNES", comportement="2", notes="RAS.",
+            ),
+        )
+
+        self.assertRedirects(
+            reponse, reverse("gestion:fiche_colonie", args=[self.colonie.id])
+        )
+        visite.refresh_from_db()
+        self.assertEqual(str(visite.date), "2026-07-02")
+        self.assertEqual(visite.observation_reine, "OEUFS_VUS")
+        self.assertEqual(visite.nb_cadres_couvain, 7)
+        self.assertEqual(visite.nb_cadres_abeilles, 9)
+        self.assertEqual(visite.reserves, "BONNES")
+        self.assertEqual(visite.comportement, 2)
+        self.assertEqual(visite.notes, "RAS.")
+
+    def test_observation_inchangee_garde_son_statut(self):
+        visite = Visite.objects.create(colonie=self.colonie, date="2026-07-01")
+        observation = ObservationVisite.objects.create(
+            visite=visite, colonie=self.colonie,
+            type_observation=TypeObservationVisite.PILLAGE,
+            certitude=CertitudeObservation.CONSTATE,
+            statut=StatutObservation.CONFIRMEE,
+        )
+
+        self.client.post(
+            reverse("gestion:modifier_visite", args=[self.colonie.id, visite.id]),
+            self._donnees_minimales(observation_pillage=CertitudeObservation.CONSTATE),
+        )
+
+        observation.refresh_from_db()
+        self.assertEqual(observation.statut, StatutObservation.CONFIRMEE)
+
+    def test_observation_ajoutee_est_ouverte(self):
+        visite = Visite.objects.create(colonie=self.colonie, date="2026-07-01")
+
+        self.client.post(
+            reverse("gestion:modifier_visite", args=[self.colonie.id, visite.id]),
+            self._donnees_minimales(observation_frelons=CertitudeObservation.DOUTE),
+        )
+
+        observation = ObservationVisite.objects.get(
+            visite=visite, type_observation=TypeObservationVisite.FRELONS,
+        )
+        self.assertEqual(observation.statut, StatutObservation.OUVERTE)
+
+    def test_observation_retiree_supprime_aussi_son_rappel(self):
+        visite = Visite.objects.create(colonie=self.colonie, date="2026-07-01")
+        observation = ObservationVisite.objects.create(
+            visite=visite, colonie=self.colonie,
+            type_observation=TypeObservationVisite.REINE_MORTE,
+            certitude=CertitudeObservation.DOUTE,
+        )
+        rappel_id = observation.rappel.id
+
+        self.client.post(
+            reverse("gestion:modifier_visite", args=[self.colonie.id, visite.id]),
+            self._donnees_minimales(),
+        )
+
+        self.assertFalse(ObservationVisite.objects.filter(id=observation.id).exists())
+        self.assertFalse(RappelRevisite.objects.filter(id=rappel_id).exists())
+
+    def test_modification_de_la_date_de_reverification_sans_doublon(self):
+        visite = Visite.objects.create(colonie=self.colonie, date="2026-07-01")
+        observation = ObservationVisite.objects.create(
+            visite=visite, colonie=self.colonie,
+            type_observation=TypeObservationVisite.REINE_MORTE,
+            certitude=CertitudeObservation.DOUTE,
+        )
+
+        self.client.post(
+            reverse("gestion:modifier_visite", args=[self.colonie.id, visite.id]),
+            self._donnees_minimales(
+                observation_reine_morte=CertitudeObservation.DOUTE,
+                date_reverification_reine_morte="2026-07-15",
+            ),
+        )
+
+        self.assertEqual(
+            RappelRevisite.objects.filter(observation=observation).count(), 1,
+        )
+        rappel = RappelRevisite.objects.get(observation=observation)
+        self.assertEqual(str(rappel.date_revisite), "2026-07-15")
+
+    def test_actions_remplacees_a_la_modification(self):
+        visite = Visite.objects.create(colonie=self.colonie, date="2026-07-01")
+        ActionVisite.objects.create(visite=visite, type_action=TypeActionVisite.NOURRISSEMENT)
+
+        self.client.post(
+            reverse("gestion:modifier_visite", args=[self.colonie.id, visite.id]),
+            self._donnees_minimales(actions=[TypeActionVisite.HAUSSE_AJOUTEE]),
+        )
+
+        self.assertEqual(
+            set(visite.actions.values_list("type_action", flat=True)),
+            {TypeActionVisite.HAUSSE_AJOUTEE},
+        )
+
+    def test_bouton_modifier_affiche_dans_lhistorique(self):
+        visite = Visite.objects.create(colonie=self.colonie, date="2026-07-01")
+
+        reponse = self.client.get(
+            reverse("gestion:fiche_colonie", args=[self.colonie.id])
+        )
+
+        self.assertContains(
+            reponse, reverse("gestion:modifier_visite", args=[self.colonie.id, visite.id]),
+        )
+
+
+class SupprimerVisiteTests(TestCase):
+    """Suppression d'une visite derrière une page de confirmation
+    explicite : rien n'est supprimé sans cette confirmation (issue
+    #48)."""
+
+    def setUp(self):
+        self.rucher = Rucher.objects.create(nom="Rucher suppression")
+        self.type_ruche = TypeRuche.objects.get(code="DADANT10")
+        self.ruche = Ruche.objects.create(
+            type_ruche=self.type_ruche, numero=90, rucher=self.rucher,
+        )
+        self.colonie = Colonie.objects.create(
+            ruche=self.ruche, mode_creation=ModeCreationColonie.ACHAT, active=True,
+        )
+        self.visite = Visite.objects.create(colonie=self.colonie, date="2026-07-05")
+        self.observation = ObservationVisite.objects.create(
+            visite=self.visite, colonie=self.colonie,
+            type_observation=TypeObservationVisite.REINE_MORTE,
+            certitude=CertitudeObservation.DOUTE,
+        )
+        self.rappel_id = self.observation.rappel.id
+
+    def test_page_de_confirmation_naffiche_pas_de_suppression(self):
+        reponse = self.client.get(
+            reverse("gestion:supprimer_visite", args=[self.colonie.id, self.visite.id])
+        )
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertContains(reponse, "Supprimer")
+        self.assertTrue(Visite.objects.filter(id=self.visite.id).exists())
+
+    def test_sans_confirmation_rien_nest_supprime(self):
+        self.client.get(
+            reverse("gestion:supprimer_visite", args=[self.colonie.id, self.visite.id])
+        )
+
+        self.assertTrue(Visite.objects.filter(id=self.visite.id).exists())
+        self.assertTrue(ObservationVisite.objects.filter(id=self.observation.id).exists())
+        self.assertTrue(RappelRevisite.objects.filter(id=self.rappel_id).exists())
+
+    def test_confirmation_supprime_visite_actions_observations_et_rappels(self):
+        ActionVisite.objects.create(visite=self.visite, type_action=TypeActionVisite.TRAITEMENT)
+
+        reponse = self.client.post(
+            reverse("gestion:supprimer_visite", args=[self.colonie.id, self.visite.id])
+        )
+
+        self.assertRedirects(
+            reponse, reverse("gestion:fiche_colonie", args=[self.colonie.id])
+        )
+        self.assertFalse(Visite.objects.filter(id=self.visite.id).exists())
+        self.assertFalse(ObservationVisite.objects.filter(id=self.observation.id).exists())
+        self.assertFalse(RappelRevisite.objects.filter(id=self.rappel_id).exists())
+        self.assertFalse(ActionVisite.objects.filter(visite_id=self.visite.id).exists())

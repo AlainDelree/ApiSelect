@@ -15,10 +15,9 @@ from django.utils import timezone
 
 from selection.models import Colonie, Ruche, Rucher
 
-from .forms import RevisiteReineMorteForm, VisiteForm
+from .forms import RevisiteReineMorteForm, VisiteForm, initial_observations_depuis_visite
 from .models import (
     ActionVisite,
-    CertitudeObservation,
     ObservationVisite,
     RappelRevisite,
     StatutObservation,
@@ -153,27 +152,51 @@ def fiche_colonie(request, colonie_id):
     })
 
 
-def _enregistrer_observation(visite, colonie, type_observation, valeur_certitude, **extra):
-    if not valeur_certitude:
+def _synchroniser_observation(visite, colonie, type_observation, nouvelle_certitude, **extra):
+    """Crée, met à jour ou supprime l'observation d'un type donné pour
+    cette visite, selon la valeur choisie dans le formulaire à boutons
+    — sert aussi bien à la création qu'à la modification (issue #48) :
+    observation absente avant et après → rien ; ajoutée → créée
+    ouverte ; retirée → supprimée (son rappel éventuel suit par la
+    cascade du modèle) ; déjà présente → certitude (et champ annexe)
+    mis à jour sans toucher au statut, qui reste celui déjà enregistré
+    (ouverte, confirmée ou infirmée). Cas ambigu retenu : si la
+    certitude d'une observation déjà confirmée ou infirmée change, son
+    statut n'est pas réinitialisé à « ouverte » — comportement le plus
+    simple, à la charge d'Alain de confirmer/infirmer à nouveau si
+    besoin depuis la fiche colonie."""
+    observation = visite.observations.filter(type_observation=type_observation).first()
+    if not nouvelle_certitude:
+        if observation is not None:
+            observation.delete()
         return None
-    return ObservationVisite.objects.create(
-        visite=visite, colonie=colonie, type_observation=type_observation,
-        certitude=valeur_certitude, **extra,
-    )
+    if observation is None:
+        return ObservationVisite.objects.create(
+            visite=visite, colonie=colonie, type_observation=type_observation,
+            certitude=nouvelle_certitude, **extra,
+        )
+    observation.certitude = nouvelle_certitude
+    for champ, valeur in extra.items():
+        setattr(observation, champ, valeur)
+    observation.save()
+    return observation
 
 
-def nouvelle_visite(request, colonie_id):
-    """Formulaire de saisie d'une visite depuis la fiche colonie, à
-    grands boutons à toucher. Si une observation « reine morte » est
-    ouverte pour cette colonie, pose en plus la question « couvain
-    ouvert présent ? » pour la confirmer ou l'infirmer (issue #43)."""
-    colonie = get_object_or_404(
-        Colonie.objects.select_related("ruche__type_ruche"), pk=colonie_id,
+def _traiter_formulaire_visite(request, colonie, visite):
+    """Formulaire à boutons de saisie d'une visite, commun à la
+    création et à la modification (issue #48) : même gabarit, même
+    classe de formulaire, mêmes champs. Seule la création pose en plus
+    la question « couvain ouvert présent ? » si une observation
+    « reine morte » reste ouverte depuis une visite précédente — sans
+    objet en modification, qui ne porte que sur les champs de la
+    visite éditée (issue #43)."""
+    creation = visite.pk is None
+    observation_reine_morte_ouverte = (
+        _observation_reine_morte_ouverte(colonie) if creation else None
     )
-    observation_reine_morte_ouverte = _observation_reine_morte_ouverte(colonie)
 
     if request.method == "POST":
-        form = VisiteForm(request.POST)
+        form = VisiteForm(request.POST, instance=visite)
         revisite_form = (
             RevisiteReineMorteForm(request.POST) if observation_reine_morte_ouverte else None
         )
@@ -185,35 +208,34 @@ def nouvelle_visite(request, colonie_id):
             visite.colonie = colonie
             visite.save()
 
+            visite.actions.all().delete()
             for type_action in form.cleaned_data["actions"]:
                 ActionVisite.objects.create(visite=visite, type_action=type_action)
 
-            _enregistrer_observation(
+            _synchroniser_observation(
                 visite, colonie, TypeObservationVisite.ESSAIMAGE,
                 form.cleaned_data["observation_essaimage"],
                 reponse_cellules_royales=form.cleaned_data["reponse_cellules_royales"],
             )
-            observation_reine_morte = _enregistrer_observation(
+            observation_reine_morte = _synchroniser_observation(
                 visite, colonie, TypeObservationVisite.REINE_MORTE,
                 form.cleaned_data["observation_reine_morte"],
             )
-            if (
-                observation_reine_morte is not None
-                and observation_reine_morte.certitude == CertitudeObservation.DOUTE
-            ):
-                # Le modèle a déjà créé le rappel par défaut (visite + 9
-                # jours) à l'enregistrement ci-dessus ; on applique ici
-                # la date choisie dans le formulaire, s'il y en a une.
+            if observation_reine_morte is not None:
+                # Le modèle crée (ou garde) le rappel par défaut à
+                # l'enregistrement ci-dessus s'il y a lieu ; on
+                # applique ici la date choisie dans le formulaire,
+                # s'il y en a une et qu'un rappel existe bien.
                 date_choisie = form.cleaned_data["date_reverification_reine_morte"]
-                if date_choisie:
-                    rappel = observation_reine_morte.rappel
+                rappel = getattr(observation_reine_morte, "rappel", None)
+                if date_choisie and rappel is not None:
                     rappel.date_revisite = date_choisie
                     rappel.save(update_fields=["date_revisite"])
-            _enregistrer_observation(
+            _synchroniser_observation(
                 visite, colonie, TypeObservationVisite.PILLAGE,
                 form.cleaned_data["observation_pillage"],
             )
-            _enregistrer_observation(
+            _synchroniser_observation(
                 visite, colonie, TypeObservationVisite.FRELONS,
                 form.cleaned_data["observation_frelons"],
             )
@@ -227,16 +249,58 @@ def nouvelle_visite(request, colonie_id):
 
             return redirect("gestion:fiche_colonie", colonie_id=colonie.id)
     else:
-        form = VisiteForm(initial={
-            "date_reverification_reine_morte": date_revisite_par_defaut(timezone.localdate()),
-        })
+        if creation:
+            initial = {
+                "date_reverification_reine_morte": date_revisite_par_defaut(timezone.localdate()),
+            }
+        else:
+            initial = initial_observations_depuis_visite(visite)
+        form = VisiteForm(instance=visite, initial=initial)
         revisite_form = RevisiteReineMorteForm() if observation_reine_morte_ouverte else None
 
-    return render(request, "gestion/nouvelle_visite.html", {
+    return render(request, "gestion/visite_form.html", {
         "colonie": colonie,
+        "visite": visite,
         "form": form,
         "revisite_form": revisite_form,
         "observation_reine_morte_ouverte": observation_reine_morte_ouverte,
+    })
+
+
+def nouvelle_visite(request, colonie_id):
+    """Formulaire de saisie d'une nouvelle visite depuis la fiche
+    colonie, à grands boutons à toucher (issue #43)."""
+    colonie = get_object_or_404(
+        Colonie.objects.select_related("ruche__type_ruche"), pk=colonie_id,
+    )
+    return _traiter_formulaire_visite(request, colonie, Visite(colonie=colonie))
+
+
+def modifier_visite(request, colonie_id, visite_id):
+    """Même formulaire que la création, pré-rempli, pour modifier une
+    visite existante (issue #48)."""
+    colonie = get_object_or_404(
+        Colonie.objects.select_related("ruche__type_ruche"), pk=colonie_id,
+    )
+    visite = get_object_or_404(Visite, pk=visite_id, colonie=colonie)
+    return _traiter_formulaire_visite(request, colonie, visite)
+
+
+def supprimer_visite(request, colonie_id, visite_id):
+    """Suppression d'une visite derrière une page de confirmation
+    explicite (issue #48) : rien n'est supprimé avant la validation de
+    ce formulaire. Supprime avec elle ses actions, ses observations et
+    les rappels de revérification liés, par cascade du modèle."""
+    colonie = get_object_or_404(
+        Colonie.objects.select_related("ruche__type_ruche"), pk=colonie_id,
+    )
+    visite = get_object_or_404(Visite, pk=visite_id, colonie=colonie)
+    if request.method == "POST":
+        visite.delete()
+        return redirect("gestion:fiche_colonie", colonie_id=colonie.id)
+    return render(request, "gestion/confirmer_suppression_visite.html", {
+        "colonie": colonie,
+        "visite": visite,
     })
 
 

@@ -12,6 +12,14 @@ urlpatterns = [
         views.nouvelle_visite, name="nouvelle_visite",
     ),
     path(
+        "colonies/<int:colonie_id>/visites/<int:visite_id>/modifier/",
+        views.modifier_visite, name="modifier_visite",
+    ),
+    path(
+        "colonies/<int:colonie_id>/visites/<int:visite_id>/supprimer/",
+        views.supprimer_visite, name="supprimer_visite",
+    ),
+    path(
         "observations/<int:observation_id>/confirmer/",
         views.confirmer_observation, name="confirmer_observation",
     ),

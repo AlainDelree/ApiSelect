@@ -1,0 +1,35 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Supprimer la visite — {{ colonie }} — ApiSelect</title>
+    <link rel="stylesheet" href="{% static 'gestion/style.css' %}">
+</head>
+<body{% if BASE_DE_TEST_ACTIVE %} class="avec-bandeau"{% endif %}>
+    {% if BASE_DE_TEST_ACTIVE %}
+    <div class="bandeau-base-test">⚠️ BASE DE TEST — données fictives</div>
+    {% endif %}
+
+    <p class="lien-retour">
+        <a href="{% url 'gestion:modifier_visite' colonie.id visite.id %}">&larr; Retour au formulaire de la visite</a>
+    </p>
+
+    <h1>Supprimer la visite du {{ visite.date }} ?</h1>
+
+    <p>Cette suppression est définitive et entraînera celle de :</p>
+    <ul>
+        <li>la visite du {{ visite.date }} ({{ colonie.ruche.type_ruche.libelle_affichage }} {{ colonie.ruche.numero }}) ;</li>
+        <li>ses {{ visite.actions.count }} action{{ visite.actions.count|pluralize }} ;</li>
+        <li>ses {{ visite.observations.count }} observation{{ visite.observations.count|pluralize }} ;</li>
+        <li>le ou les rappels de revérification liés à ces observations.</li>
+    </ul>
+
+    <form method="post">
+        {% csrf_token %}
+        <button type="submit" class="bouton-supprimer-confirmer">Supprimer définitivement cette visite</button>
+        <a class="bouton-annuler" href="{% url 'gestion:modifier_visite' colonie.id visite.id %}">Annuler</a>
+    </form>
+</body>
+</html>

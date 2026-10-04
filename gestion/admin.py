@@ -1,6 +1,13 @@
 """Administration des visites et observations (issue #43). Ne doit
 jamais importer le moindre modèle ou la moindre vue d'admin propre à
-la sélection génétique."""
+la sélection génétique.
+
+Depuis l'issue #48, la saisie courante d'une visite passe uniquement
+par le formulaire à boutons de la fiche colonie (création et
+modification) : l'admin ne permet plus d'en créer, ni d'en créer les
+observations ou rappels, pour éviter un second formulaire de saisie
+qui n'offrirait pas les mêmes champs. Modification et suppression y
+restent possibles, à titre exceptionnel."""
 
 from django.contrib import admin
 
@@ -11,11 +18,17 @@ class ActionVisiteInline(admin.TabularInline):
     model = ActionVisite
     extra = 0
 
+    def has_add_permission(self, request, obj=None):
+        return False
+
 
 class ObservationVisiteInline(admin.TabularInline):
     model = ObservationVisite
     extra = 0
     fields = ["type_observation", "certitude", "statut", "reponse_cellules_royales"]
+
+    def has_add_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(Visite)
@@ -29,6 +42,9 @@ class VisiteAdmin(admin.ModelAdmin):
     autocomplete_fields = ["colonie"]
     inlines = [ActionVisiteInline, ObservationVisiteInline]
 
+    def has_add_permission(self, request):
+        return False
+
 
 @admin.register(ObservationVisite)
 class ObservationVisiteAdmin(admin.ModelAdmin):
@@ -41,6 +57,9 @@ class ObservationVisiteAdmin(admin.ModelAdmin):
     autocomplete_fields = ["colonie", "visite"]
     list_editable = ["statut"]
 
+    def has_add_permission(self, request):
+        return False
+
 
 @admin.register(RappelRevisite)
 class RappelRevisiteAdmin(admin.ModelAdmin):
@@ -49,3 +68,6 @@ class RappelRevisiteAdmin(admin.ModelAdmin):
     list_editable = ["traite"]
     autocomplete_fields = ["observation"]
     ordering = ["date_revisite"]
+
+    def has_add_permission(self, request):
+        return False

@@ -22,23 +22,25 @@ Scission en deux pour céder un jour la gestion seule (programme
 Windows autonome), sélection réservée à Alain :
 - **Gestion du rucher** (cible, construite d'abord) : ruchers, ruches,
   colonies, reines, visites ; à construire : récoltes, traitements,
-  stocks.
+  stocks. Principe de saisie : un seul formulaire par type de donnée,
+  par l'interface visuelle ; admin réservée aux référentiels et aux
+  corrections exceptionnelles — jamais un second formulaire de saisie
+  pour les mêmes données.
 - **Sélection des reines** (réservée à Alain, reprise plus tard,
   inchangée pour l'instant) : campagnes, cellules royales, critères,
   mesures, calendrier d'élevage, fiches PDF, résultats, diagnostic.
 
-**Règle de dépendance (impérative pour tout nouveau code de
-gestion)** : le code de gestion ne doit jamais importer, référencer
-ni dépendre d'un modèle, d'une vue, d'une table ou d'un gabarit de
-sélection. Seule la sélection peut dépendre de la gestion.
+**Règle de dépendance (impérative)** : le code de gestion ne doit
+jamais importer/référencer un modèle, une vue, une table ou un
+gabarit de sélection. Seule la sélection dépend de la gestion.
 
-**Portabilité (pour tout nouveau code)** : pas de chemin écrit en dur,
-pas de SQL propre à PostgreSQL, pas de dépendance à un script bash —
-la version Windows autonome tournera sous SQLite (chantier ultérieur ;
-base actuelle : PostgreSQL).
+**Portabilité** : pas de chemin en dur, pas de SQL PostgreSQL-
+spécifique, pas de dépendance à un script bash — version Windows
+autonome prévue sous SQLite (base actuelle : PostgreSQL).
 
 ## Stack
-Python/Django, admin Django, xhtml2pdf.
+Python/Django, admin Django, xhtml2pdf. Documents de référence :
+`Cours_Apiculture/` (gitignoré), jamais committé.
 
 ## Vocabulaire (la rigueur vient du code, pas de l'oral)
 **Rucher** = emplacement. **Ruche** = boîte physique (type+numéro =
@@ -47,15 +49,11 @@ vivante liée à une ruche (historique config + événements séparé).
 **Reine** = identité généalogique indépendante de la boîte (mère,
 lignée mâle probable, station de fécondation, statut vierge/fécondée,
 mode d'acquisition : élevée / achetée en CR / arrivée avec essaim /
-remérage naturel — issue #29). **CelluleRoyale** = tentative d'élevage (sélection).
+remérage naturel). **CelluleRoyale** = tentative d'élevage (sélection).
 Alias : affichage seulement, jamais recherché/lié (champs structurés
 id/type+numéro).
 
-## Documents de référence
-`Cours_Apiculture/` (gitignoré) : barème/calendrier source, jamais
-committé.
-
-## Sélection génétique (inchangée)
+## Sélection (inchangée)
 9 critères (rapide : santé/propreté/agressivité/tenue au cadre ;
 approfondie : nettoyage/récolte/couvain/miel/pollen), score 1-4,
 fiches PDF. `LotCriteres` = lot nommé réutilisable de poids
@@ -70,7 +68,6 @@ devenue reine. Diagnostic (`/diagnostic/`, issue #32) :
 `selection/diagnostics.py`, liste `VERIFICATIONS`.
 
 ## État des migrations et d'avancement
-`apiselect_dev` à jour. Sur `apiselect` : 0010-0014 déjà appliquées
-(constaté par Alain), 0015/0016 et celles de `gestion` en attente
-(Alain s'en charge). Saisie réelle : 2 ruchers (Bovesse, Anhée).
-Reprise après une pause.
+`apiselect_dev` à jour. Sur `apiselect` : 0010-0014 appliquées,
+0015/0016 et celles de `gestion` en attente (Alain s'en charge).
+Saisie réelle : 2 ruchers (Bovesse, Anhée).

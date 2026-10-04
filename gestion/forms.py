@@ -18,7 +18,9 @@ from .models import (
     ObservationReine,
     ReponseCellulesRoyales,
     TypeActionVisite,
+    TypeObservationVisite,
     Visite,
+    date_revisite_par_defaut,
 )
 
 CHOIX_PRESENCE_OBSERVATION = [
@@ -100,6 +102,33 @@ class VisiteForm(forms.ModelForm):
                 "à la date de la visite.",
             )
         return cleaned_data
+
+
+def initial_observations_depuis_visite(visite):
+    """Valeurs initiales des champs d'observation, d'action et de
+    revérification du formulaire à boutons, à partir de ce qui est déjà
+    enregistré pour cette visite — utilisé pour pré-remplir le même
+    formulaire en modification (issue #48). Sans rappel existant, la
+    date de revérification proposée reste calculée de la même façon
+    qu'à la création, mais à partir de la date de la visite plutôt que
+    d'aujourd'hui."""
+    observations = {obs.type_observation: obs for obs in visite.observations.all()}
+    essaimage = observations.get(TypeObservationVisite.ESSAIMAGE)
+    reine_morte = observations.get(TypeObservationVisite.REINE_MORTE)
+    pillage = observations.get(TypeObservationVisite.PILLAGE)
+    frelons = observations.get(TypeObservationVisite.FRELONS)
+    rappel = getattr(reine_morte, "rappel", None) if reine_morte else None
+    return {
+        "actions": list(visite.actions.values_list("type_action", flat=True)),
+        "observation_essaimage": essaimage.certitude if essaimage else "",
+        "reponse_cellules_royales": essaimage.reponse_cellules_royales if essaimage else "",
+        "observation_reine_morte": reine_morte.certitude if reine_morte else "",
+        "date_reverification_reine_morte": (
+            rappel.date_revisite if rappel else date_revisite_par_defaut(visite.date)
+        ),
+        "observation_pillage": pillage.certitude if pillage else "",
+        "observation_frelons": frelons.certitude if frelons else "",
+    }
 
 
 class RevisiteReineMorteForm(forms.Form):

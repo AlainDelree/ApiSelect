@@ -125,7 +125,10 @@
         <ul class="liste-visites">
             {% for visite in visites %}
             <li>
-                <p class="visite-date">{{ visite.date }}</p>
+                <p class="visite-date">
+                    {{ visite.date }}
+                    <a class="lien-modifier-visite" href="{% url 'gestion:modifier_visite' colonie.id visite.id %}">Modifier</a>
+                </p>
                 {% with segments=visite.details_affichage %}
                 {% if segments %}
                 <p class="visite-detail">{{ segments|join:" · " }}</p>
