@@ -27,6 +27,7 @@ from selection.models import (
 from .forms import (
     MarquerReineForm,
     NouvelleReineForm,
+    ReineForm,
     RevisiteReineMorteForm,
     VisiteForm,
     initial_observations_depuis_visite,
@@ -405,27 +406,7 @@ def nouvelle_reine(request, colonie_id):
             if data["origine"] == "EXISTANTE":
                 reine = data["reine_existante"]
             else:
-                vendeur = data.get("vendeur")
-                if vendeur is None and data.get("nouveau_vendeur_nom"):
-                    vendeur = Vendeur.objects.create(
-                        nom=data["nouveau_vendeur_nom"],
-                        telephone=data.get("nouveau_vendeur_telephone", ""),
-                        adresse=data.get("nouveau_vendeur_adresse", ""),
-                    )
-                reine = Reine.objects.create(
-                    identifiant=data["identifiant"],
-                    mere=data.get("mere"),
-                    mode_acquisition=data.get("mode_acquisition") or "",
-                    vendeur=vendeur,
-                    statut=data.get("statut") or None,
-                    date_fecondation=data.get("date_fecondation"),
-                    date_naissance=data.get("date_naissance"),
-                    marquage_effectue=data["marquage_effectue"],
-                    date_marquage=data.get("date_marquage"),
-                    couleur_marquage=(
-                        data.get("couleur_marquage") if data["marquage_effectue"] else ""
-                    ),
-                )
+                reine = form.save()
 
             ancienne_reine = colonie.reine_actuelle
             colonie.reine_actuelle = reine

@@ -162,14 +162,157 @@ CHOIX_ORIGINE_REINE = [
 ]
 
 
-class NouvelleReineForm(forms.Form):
+class ReineForm(forms.ModelForm):
+    """Formulaire unique pour tous les champs d'une reine (issue #54),
+    réutilisé pour la création, la modification (fiche colonie et page
+    « Reines ») et le remplacement (`NouvelleReineForm` ci-dessous, qui
+    en hérite) : les mêmes champs partout, pour qu'il ne reste plus
+    rien qui ne se règle que par l'administration. Pour un achat, le
+    vendeur se choisit dans la liste ou se crée directement ici — pas
+    de second écran de saisie (issue #51)."""
+
+    mere = forms.ModelChoiceField(
+        label="Mère (si connue)", queryset=Reine.objects.all(), required=False,
+    )
+    vendeur = forms.ModelChoiceField(
+        label="Vendeur déjà enregistré", queryset=Vendeur.objects.all(), required=False,
+    )
+    nouveau_vendeur_nom = forms.CharField(
+        label="Ou nouveau vendeur — nom", max_length=150, required=False,
+    )
+    nouveau_vendeur_telephone = forms.CharField(
+        label="Téléphone du vendeur", max_length=30, required=False,
+    )
+    nouveau_vendeur_adresse = forms.CharField(
+        label="Adresse du vendeur", max_length=255, required=False,
+    )
+    marquage_effectue = forms.TypedChoiceField(
+        label="Marquage effectué",
+        choices=CHOIX_OUI_NON, coerce=lambda valeur: valeur == "oui",
+        initial="non",
+        widget=forms.RadioSelect(attrs={"class": "groupe-choix"}),
+    )
+    couleur_marquage = forms.ChoiceField(
+        label="Couleur du marquage",
+        choices=[("", "—")] + list(CouleurMarquage.choices), required=False,
+    )
+
+    class Meta:
+        model = Reine
+        fields = [
+            "identifiant", "mere", "statut", "mode_acquisition", "vendeur",
+            "date_naissance", "date_fecondation", "station_fecondation",
+            "marquage_effectue", "date_marquage", "couleur_marquage",
+            "date_deces", "lignee_male_probable", "notes",
+        ]
+        labels = {
+            "identifiant": "Identifiant",
+            "statut": "Statut",
+            "mode_acquisition": "Mode d'acquisition",
+            "date_naissance": "Date de naissance",
+            "date_fecondation": "Date de fécondation",
+            "station_fecondation": "Station de fécondation",
+            "date_marquage": "Date de marquage",
+            "date_deces": "Date de décès",
+            "lignee_male_probable": "Lignée mâle probable",
+            "notes": "Notes",
+        }
+        widgets = {
+            "statut": forms.RadioSelect(attrs={"class": "groupe-choix"}),
+            "mode_acquisition": forms.RadioSelect(attrs={"class": "groupe-choix"}),
+            "date_naissance": forms.DateInput(attrs={"type": "date"}),
+            "date_fecondation": forms.DateInput(attrs={"type": "date"}),
+            "date_marquage": forms.DateInput(attrs={"type": "date"}),
+            "date_deces": forms.DateInput(attrs={"type": "date"}),
+            "notes": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["statut"].required = False
+        self.fields["statut"].choices = [("", "Non renseigné")] + list(StatutReine.choices)
+        self.fields["mode_acquisition"].required = False
+        self.fields["mode_acquisition"].choices = (
+            [("", "Non renseigné")] + list(ModeAcquisitionReine.choices)
+        )
+        # Valeur à restaurer si le marquage n'est pas (ou plus) effectué à
+        # l'enregistrement : une couleur déjà enregistrée en base n'est
+        # jamais effacée silencieusement par une simple modification (cf.
+        # `save`) ; capturée ici, avant que `construct_instance` ne mette
+        # à jour `self.instance` avec les données du formulaire.
+        self._couleur_marquage_avant = (
+            self.instance.couleur_marquage if self.instance.pk else ""
+        )
+        if self.instance.pk and not self.is_bound:
+            couleur_proposee = couleur_marquage_proposee(self.instance)
+            if couleur_proposee:
+                self.fields["couleur_marquage"].initial = couleur_proposee
+
+    def clean_identifiant(self):
+        identifiant = self.cleaned_data.get("identifiant", "")
+        if not identifiant:
+            return identifiant
+        queryset = Reine.objects.filter(identifiant=identifiant)
+        if self.instance.pk:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        if queryset.exists():
+            raise forms.ValidationError(
+                "Cet identifiant est déjà utilisé par une autre reine.",
+            )
+        return identifiant
+
+    def _date_marquage_par_defaut(self, cleaned_data):
+        return timezone.localdate()
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if (
+            cleaned_data.get("mode_acquisition") in MODES_ACQUISITION_ACHAT
+            and not cleaned_data.get("vendeur")
+            and not cleaned_data.get("nouveau_vendeur_nom")
+        ):
+            self.add_error(
+                "vendeur", "Choisissez un vendeur ou renseignez-en un nouveau.",
+            )
+        if cleaned_data.get("marquage_effectue"):
+            if not cleaned_data.get("date_marquage"):
+                cleaned_data["date_marquage"] = self._date_marquage_par_defaut(cleaned_data)
+            if not cleaned_data.get("couleur_marquage"):
+                self.add_error(
+                    "couleur_marquage",
+                    "La couleur du marquage est obligatoire si le marquage "
+                    "est effectué.",
+                )
+        return cleaned_data
+
+    def save(self, commit=True):
+        reine = super().save(commit=False)
+        vendeur = self.cleaned_data.get("vendeur")
+        if vendeur is None and self.cleaned_data.get("nouveau_vendeur_nom"):
+            vendeur = Vendeur.objects.create(
+                nom=self.cleaned_data["nouveau_vendeur_nom"],
+                telephone=self.cleaned_data.get("nouveau_vendeur_telephone", ""),
+                adresse=self.cleaned_data.get("nouveau_vendeur_adresse", ""),
+            )
+        reine.vendeur = vendeur
+        if not reine.marquage_effectue:
+            reine.couleur_marquage = (
+                self.cleaned_data.get("couleur_marquage") or self._couleur_marquage_avant
+            )
+        if commit:
+            reine.save()
+        return reine
+
+
+class NouvelleReineForm(ReineForm):
     """Formulaire de remplacement de reine depuis la fiche colonie
-    (issue #51), à grands boutons comme le formulaire de visite : soit
-    une reine déjà enregistrée et non affectée à une colonie active
-    (ex. issue d'une cellule royale devenue reine), soit une nouvelle
-    reine créée dans la foulée. Pour un achat, le vendeur se choisit
-    dans la liste ou se crée directement ici — pas de second écran de
-    saisie."""
+    (issue #51), à grands boutons comme le formulaire de visite. En
+    plus des champs de la reine (communs avec la création et la
+    modification, issue #54, hérités de `ReineForm`) : la date de
+    remplacement et le choix entre une reine déjà enregistrée et non
+    affectée à une colonie active (ex. issue d'une cellule royale
+    devenue reine), ou une nouvelle reine créée dans la foulée — ces
+    deux derniers champs n'existent que pour un remplacement."""
 
     date_remplacement = forms.DateField(
         label="Date de remplacement",
@@ -186,63 +329,16 @@ class NouvelleReineForm(forms.Form):
         label="Reine déjà enregistrée",
         queryset=Reine.objects.all(), required=False,
     )
-    identifiant = forms.CharField(
-        label="Identifiant de la nouvelle reine", max_length=50, required=False,
-    )
-    mere = forms.ModelChoiceField(
-        label="Mère (si connue)", queryset=Reine.objects.all(), required=False,
-    )
-    mode_acquisition = forms.ChoiceField(
-        label="Mode d'acquisition",
-        choices=[("", "Non renseigné")] + list(ModeAcquisitionReine.choices),
-        required=False,
-        widget=forms.RadioSelect(attrs={"class": "groupe-choix"}),
-    )
-    vendeur = forms.ModelChoiceField(
-        label="Vendeur déjà enregistré", queryset=Vendeur.objects.all(), required=False,
-    )
-    nouveau_vendeur_nom = forms.CharField(
-        label="Ou nouveau vendeur — nom", max_length=150, required=False,
-    )
-    nouveau_vendeur_telephone = forms.CharField(
-        label="Téléphone du vendeur", max_length=30, required=False,
-    )
-    nouveau_vendeur_adresse = forms.CharField(
-        label="Adresse du vendeur", max_length=255, required=False,
-    )
-    statut = forms.ChoiceField(
-        label="Statut",
-        choices=[("", "Non renseigné")] + list(StatutReine.choices), required=False,
-        widget=forms.RadioSelect(attrs={"class": "groupe-choix"}),
-    )
-    date_fecondation = forms.DateField(
-        label="Date de fécondation", required=False,
-        widget=forms.DateInput(attrs={"type": "date"}),
-    )
-    date_naissance = forms.DateField(
-        label="Date de naissance", required=False,
-        widget=forms.DateInput(attrs={"type": "date"}),
-    )
-    marquage_effectue = forms.TypedChoiceField(
-        label="Marquage effectué",
-        choices=CHOIX_OUI_NON, coerce=lambda valeur: valeur == "oui",
-        initial="non",
-        widget=forms.RadioSelect(attrs={"class": "groupe-choix"}),
-    )
-    date_marquage = forms.DateField(
-        label="Date de marquage", required=False,
-        widget=forms.DateInput(attrs={"type": "date"}),
-    )
-    couleur_marquage = forms.ChoiceField(
-        label="Couleur du marquage",
-        choices=[("", "—")] + list(CouleurMarquage.choices), required=False,
-    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["identifiant"].required = False
         self.fields["reine_existante"].queryset = (
             Reine.objects.exclude(colonie_dirigee__active=True).distinct()
         )
+
+    def _date_marquage_par_defaut(self, cleaned_data):
+        return cleaned_data.get("date_remplacement") or timezone.localdate()
 
     def clean(self):
         cleaned_data = super().clean()
@@ -253,30 +349,10 @@ class NouvelleReineForm(forms.Form):
                     "reine_existante", "Choisissez une reine déjà enregistrée.",
                 )
         elif origine == "NOUVELLE":
-            identifiant = cleaned_data.get("identifiant")
-            if not identifiant:
+            if not cleaned_data.get("identifiant"):
                 self.add_error(
                     "identifiant",
                     "L'identifiant est obligatoire pour une nouvelle reine.",
-                )
-            elif Reine.objects.filter(identifiant=identifiant).exists():
-                self.add_error("identifiant", "Cet identifiant est déjà utilisé.")
-            if (
-                cleaned_data.get("mode_acquisition") in MODES_ACQUISITION_ACHAT
-                and not cleaned_data.get("vendeur")
-                and not cleaned_data.get("nouveau_vendeur_nom")
-            ):
-                self.add_error(
-                    "vendeur", "Choisissez un vendeur ou renseignez-en un nouveau.",
-                )
-        if cleaned_data.get("marquage_effectue"):
-            if not cleaned_data.get("date_marquage"):
-                cleaned_data["date_marquage"] = cleaned_data.get("date_remplacement")
-            if not cleaned_data.get("couleur_marquage"):
-                self.add_error(
-                    "couleur_marquage",
-                    "La couleur du marquage est obligatoire si le marquage "
-                    "est effectué.",
                 )
         return cleaned_data
 
