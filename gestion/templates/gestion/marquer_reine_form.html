@@ -36,6 +36,14 @@
             {% endif %}
         </div>
 
+        <div class="champ-visite">
+            <label for="{{ form.couleur_marquage.id_for_label }}">{{ form.couleur_marquage.label }}</label>
+            {{ form.couleur_marquage }}
+            {% if form.couleur_marquage.errors %}
+            <p class="erreur-champ">{{ form.couleur_marquage.errors|striptags }}</p>
+            {% endif %}
+        </div>
+
         <button type="submit" class="bouton-enregistrer">Confirmer le marquage</button>
     </form>
 </body>

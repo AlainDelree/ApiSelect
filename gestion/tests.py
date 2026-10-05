@@ -22,6 +22,7 @@ from selection.models import (
 )
 
 from .affichage import COULEUR_GRISE_PAR_DEFAUT, bande_ruche
+from .couleurs import couleur_marquage_pour_annee
 from .models import (
     DELAI_RAPPEL_REINE_MORTE_JOURS,
     ActionVisite,
@@ -1676,7 +1677,7 @@ class MarquageReineTests(TestCase):
         self.assertNotContains(accueil, "pastille-marquage-vide")
         self.assertContains(accueil, "Marquée")
 
-    def test_bouton_marquer_la_reine_enregistre_marquage_et_date(self):
+    def test_bouton_marquer_la_reine_enregistre_marquage_date_et_couleur(self):
         reine = Reine.objects.create(identifiant="R-A-MARQUER-1")
         colonie = Colonie.objects.create(
             ruche=self.ruche, reine_actuelle=reine,
@@ -1685,7 +1686,11 @@ class MarquageReineTests(TestCase):
 
         reponse = self.client.post(
             reverse("gestion:marquer_reine", args=[reine.id]),
-            {"date_marquage": "2026-07-14", "retour": f"colonie:{colonie.id}"},
+            {
+                "date_marquage": "2026-07-14",
+                "couleur_marquage": CouleurMarquage.JAUNE,
+                "retour": f"colonie:{colonie.id}",
+            },
         )
 
         self.assertRedirects(
@@ -1694,6 +1699,7 @@ class MarquageReineTests(TestCase):
         reine.refresh_from_db()
         self.assertTrue(reine.marquage_effectue)
         self.assertEqual(str(reine.date_marquage), "2026-07-14")
+        self.assertEqual(reine.couleur_marquage, CouleurMarquage.JAUNE)
 
     def test_compteur_et_page_reines_a_marquer_ne_listent_que_les_actives_non_marquees(self):
         reine_active_non_marquee = Reine.objects.create(identifiant="R-COMPTE-1")
@@ -1727,3 +1733,270 @@ class MarquageReineTests(TestCase):
         self.assertContains(page, "R-COMPTE-1")
         self.assertNotContains(page, "R-COMPTE-2")
         self.assertNotContains(page, "R-COMPTE-3")
+
+
+class CouleurMarquagePourAnneeTests(TestCase):
+    """Correspondance année de naissance -> couleur de marquage (issue
+    #53) : dernier chiffre de l'année, une couleur par année, aucune
+    proposition si l'année est inconnue."""
+
+    def test_une_couleur_par_annee(self):
+        self.assertEqual(couleur_marquage_pour_annee(2021), CouleurMarquage.BLANC)
+        self.assertEqual(couleur_marquage_pour_annee(2026), CouleurMarquage.BLANC)
+        self.assertEqual(couleur_marquage_pour_annee(2022), CouleurMarquage.JAUNE)
+        self.assertEqual(couleur_marquage_pour_annee(2027), CouleurMarquage.JAUNE)
+        self.assertEqual(couleur_marquage_pour_annee(2023), CouleurMarquage.ROUGE)
+        self.assertEqual(couleur_marquage_pour_annee(2028), CouleurMarquage.ROUGE)
+        self.assertEqual(couleur_marquage_pour_annee(2024), CouleurMarquage.VERT)
+        self.assertEqual(couleur_marquage_pour_annee(2029), CouleurMarquage.VERT)
+        self.assertEqual(couleur_marquage_pour_annee(2025), CouleurMarquage.BLEU)
+        self.assertEqual(couleur_marquage_pour_annee(2030), CouleurMarquage.BLEU)
+
+    def test_aucune_proposition_si_annee_inconnue(self):
+        self.assertIsNone(couleur_marquage_pour_annee(None))
+
+
+class MarquerReineCouleurTests(TestCase):
+    """Couleur de marquage sur la page « Marquer la reine » (issue #53) :
+    proposée selon l'année de naissance ou la couleur déjà enregistrée,
+    obligatoire pour enregistrer le marquage."""
+
+    def setUp(self):
+        self.rucher = Rucher.objects.create(nom="Rucher couleur marquage")
+        self.type_ruche = TypeRuche.objects.get(code="DADANT10")
+        self.ruche = Ruche.objects.create(
+            type_ruche=self.type_ruche, numero=220, rucher=self.rucher,
+        )
+
+    def test_couleur_proposee_selon_annee_de_naissance(self):
+        reine = Reine.objects.create(
+            identifiant="R-COULEUR-ANNEE", date_naissance=date(2024, 3, 1),
+        )
+        Colonie.objects.create(
+            ruche=self.ruche, reine_actuelle=reine,
+            mode_creation=ModeCreationColonie.ACHAT, active=True,
+        )
+
+        reponse = self.client.get(reverse("gestion:marquer_reine", args=[reine.id]))
+
+        self.assertEqual(
+            reponse.context["form"].fields["couleur_marquage"].initial,
+            CouleurMarquage.VERT,
+        )
+
+    def test_couleur_deja_enregistree_proposee_en_priorite(self):
+        reine = Reine.objects.create(
+            identifiant="R-COULEUR-PRIORITE",
+            date_naissance=date(2024, 3, 1),
+            couleur_marquage=CouleurMarquage.BLEU,
+        )
+        Colonie.objects.create(
+            ruche=self.ruche, reine_actuelle=reine,
+            mode_creation=ModeCreationColonie.ACHAT, active=True,
+        )
+
+        reponse = self.client.get(reverse("gestion:marquer_reine", args=[reine.id]))
+
+        self.assertEqual(
+            reponse.context["form"].fields["couleur_marquage"].initial,
+            CouleurMarquage.BLEU,
+        )
+
+    def test_naissance_inconnue_sans_proposition(self):
+        reine = Reine.objects.create(identifiant="R-COULEUR-INCONNUE")
+        Colonie.objects.create(
+            ruche=self.ruche, reine_actuelle=reine,
+            mode_creation=ModeCreationColonie.ACHAT, active=True,
+        )
+
+        reponse = self.client.get(reverse("gestion:marquer_reine", args=[reine.id]))
+
+        self.assertIsNone(
+            reponse.context["form"].fields["couleur_marquage"].initial,
+        )
+
+    def test_couleur_obligatoire_pour_marquer(self):
+        reine = Reine.objects.create(identifiant="R-COULEUR-OBLIGATOIRE")
+        colonie = Colonie.objects.create(
+            ruche=self.ruche, reine_actuelle=reine,
+            mode_creation=ModeCreationColonie.ACHAT, active=True,
+        )
+
+        reponse = self.client.post(
+            reverse("gestion:marquer_reine", args=[reine.id]),
+            {"date_marquage": "2026-07-14", "retour": f"colonie:{colonie.id}"},
+        )
+
+        self.assertEqual(reponse.status_code, 200)
+        reine.refresh_from_db()
+        self.assertFalse(reine.marquage_effectue)
+
+
+class AffichageMarquageFicheColonieTests(TestCase):
+    """Bloc « Reine » de la fiche colonie (issue #53) : « Marquée en
+    [couleur] le [date] » ou « Non marquée »."""
+
+    def setUp(self):
+        self.rucher = Rucher.objects.create(nom="Rucher affichage marquage")
+        self.type_ruche = TypeRuche.objects.get(code="DADANT10")
+        self.ruche = Ruche.objects.create(
+            type_ruche=self.type_ruche, numero=221, rucher=self.rucher,
+        )
+
+    def test_reine_marquee_affiche_couleur_et_date(self):
+        reine = Reine.objects.create(
+            identifiant="R-AFFICHAGE-MARQUEE", marquage_effectue=True,
+            date_marquage="2026-04-02", couleur_marquage=CouleurMarquage.ROUGE,
+        )
+        colonie = Colonie.objects.create(
+            ruche=self.ruche, reine_actuelle=reine,
+            mode_creation=ModeCreationColonie.ACHAT, active=True,
+        )
+
+        fiche = self.client.get(reverse("gestion:fiche_colonie", args=[colonie.id]))
+
+        self.assertContains(
+            fiche, f"Marquée en rouge le {date_format(date(2026, 4, 2))}",
+        )
+
+    def test_reine_non_marquee_affiche_non_marquee(self):
+        reine = Reine.objects.create(identifiant="R-AFFICHAGE-NON-MARQUEE")
+        colonie = Colonie.objects.create(
+            ruche=self.ruche, reine_actuelle=reine,
+            mode_creation=ModeCreationColonie.ACHAT, active=True,
+        )
+
+        fiche = self.client.get(reverse("gestion:fiche_colonie", args=[colonie.id]))
+
+        self.assertContains(fiche, "Non marquée")
+
+
+class CouleurAUtiliserReinesAMarquerTests(TestCase):
+    """Couleur à utiliser affichée sur la page « Reines à marquer »
+    (issue #53), pour savoir quel marqueur prendre avant d'aller au
+    rucher."""
+
+    def setUp(self):
+        self.rucher = Rucher.objects.create(nom="Rucher couleur à utiliser")
+        self.type_ruche = TypeRuche.objects.get(code="DADANT10")
+        self.ruche = Ruche.objects.create(
+            type_ruche=self.type_ruche, numero=230, rucher=self.rucher,
+        )
+
+    def test_couleur_a_utiliser_selon_annee_de_naissance(self):
+        reine = Reine.objects.create(
+            identifiant="R-UTILISER-ANNEE", date_naissance=date(2023, 5, 1),
+        )
+        Colonie.objects.create(
+            ruche=self.ruche, reine_actuelle=reine,
+            mode_creation=ModeCreationColonie.ACHAT, active=True,
+        )
+
+        page = self.client.get(reverse("gestion:reines_a_marquer"))
+
+        self.assertContains(page, "Couleur à utiliser : rouge")
+
+    def test_couleur_a_choisir_si_naissance_inconnue(self):
+        reine = Reine.objects.create(identifiant="R-UTILISER-INCONNUE")
+        Colonie.objects.create(
+            ruche=self.ruche, reine_actuelle=reine,
+            mode_creation=ModeCreationColonie.ACHAT, active=True,
+        )
+
+        page = self.client.get(reverse("gestion:reines_a_marquer"))
+
+        self.assertContains(page, "couleur à choisir")
+
+
+class NouvelleReineCouleurMarquageTests(TestCase):
+    """Couleur de marquage dans le formulaire « Nouvelle reine » (issue
+    #53) : obligatoire quand le marquage est effectué, non demandée
+    sinon, couleur déjà enregistrée jamais effacée."""
+
+    def setUp(self):
+        self.rucher = Rucher.objects.create(nom="Rucher nouvelle reine couleur")
+        self.type_ruche = TypeRuche.objects.get(code="DADANT10")
+        self.ruche = Ruche.objects.create(
+            type_ruche=self.type_ruche, numero=240, rucher=self.rucher,
+        )
+        self.ancienne_reine = Reine.objects.create(identifiant="R-NR-COULEUR-ANCIENNE")
+        self.colonie = Colonie.objects.create(
+            ruche=self.ruche, reine_actuelle=self.ancienne_reine,
+            mode_creation=ModeCreationColonie.ACHAT, active=True,
+        )
+
+    def test_marquage_oui_sans_couleur_refuse(self):
+        reponse = self.client.post(
+            reverse("gestion:nouvelle_reine", args=[self.colonie.id]),
+            {
+                "date_remplacement": "2026-08-01",
+                "origine": "NOUVELLE",
+                "identifiant": "R-NR-COULEUR-1",
+                "marquage_effectue": "oui",
+                "date_marquage": "2026-08-01",
+            },
+        )
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertEqual(Reine.objects.filter(identifiant="R-NR-COULEUR-1").count(), 0)
+
+    def test_marquage_oui_avec_couleur_enregistree(self):
+        reponse = self.client.post(
+            reverse("gestion:nouvelle_reine", args=[self.colonie.id]),
+            {
+                "date_remplacement": "2026-08-02",
+                "origine": "NOUVELLE",
+                "identifiant": "R-NR-COULEUR-2",
+                "date_naissance": "2027-01-01",
+                "marquage_effectue": "oui",
+                "date_marquage": "2026-08-02",
+                "couleur_marquage": CouleurMarquage.JAUNE,
+            },
+        )
+
+        self.assertRedirects(
+            reponse, reverse("gestion:fiche_colonie", args=[self.colonie.id]),
+        )
+        nouvelle_reine = Reine.objects.get(identifiant="R-NR-COULEUR-2")
+        self.assertTrue(nouvelle_reine.marquage_effectue)
+        self.assertEqual(nouvelle_reine.couleur_marquage, CouleurMarquage.JAUNE)
+        self.assertEqual(str(nouvelle_reine.date_naissance), "2027-01-01")
+
+    def test_marquage_non_ne_demande_pas_de_couleur(self):
+        reponse = self.client.post(
+            reverse("gestion:nouvelle_reine", args=[self.colonie.id]),
+            {
+                "date_remplacement": "2026-08-03",
+                "origine": "NOUVELLE",
+                "identifiant": "R-NR-COULEUR-3",
+                "marquage_effectue": "non",
+            },
+        )
+
+        self.assertRedirects(
+            reponse, reverse("gestion:fiche_colonie", args=[self.colonie.id]),
+        )
+        nouvelle_reine = Reine.objects.get(identifiant="R-NR-COULEUR-3")
+        self.assertFalse(nouvelle_reine.marquage_effectue)
+        self.assertEqual(nouvelle_reine.couleur_marquage, "")
+
+    def test_origine_existante_conserve_couleur_deja_enregistree(self):
+        reine_libre = Reine.objects.create(
+            identifiant="R-NR-COULEUR-EXISTANTE", couleur_marquage=CouleurMarquage.BLEU,
+        )
+
+        reponse = self.client.post(
+            reverse("gestion:nouvelle_reine", args=[self.colonie.id]),
+            {
+                "date_remplacement": "2026-08-04",
+                "origine": "EXISTANTE",
+                "reine_existante": reine_libre.id,
+                "marquage_effectue": "non",
+            },
+        )
+
+        self.assertRedirects(
+            reponse, reverse("gestion:fiche_colonie", args=[self.colonie.id]),
+        )
+        reine_libre.refresh_from_db()
+        self.assertEqual(reine_libre.couleur_marquage, CouleurMarquage.BLEU)

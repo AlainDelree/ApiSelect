@@ -419,8 +419,12 @@ def nouvelle_reine(request, colonie_id):
                     vendeur=vendeur,
                     statut=data.get("statut") or None,
                     date_fecondation=data.get("date_fecondation"),
+                    date_naissance=data.get("date_naissance"),
                     marquage_effectue=data["marquage_effectue"],
                     date_marquage=data.get("date_marquage"),
+                    couleur_marquage=(
+                        data.get("couleur_marquage") if data["marquage_effectue"] else ""
+                    ),
                 )
 
             ancienne_reine = colonie.reine_actuelle
@@ -468,16 +472,19 @@ def marquer_reine(request, reine_id):
     retour = request.GET.get("retour") or request.POST.get("retour") or ""
 
     if request.method == "POST":
-        form = MarquerReineForm(request.POST)
+        form = MarquerReineForm(request.POST, reine=reine)
         if form.is_valid():
             reine.marquage_effectue = True
             reine.date_marquage = form.cleaned_data["date_marquage"]
-            reine.save(update_fields=["marquage_effectue", "date_marquage"])
+            reine.couleur_marquage = form.cleaned_data["couleur_marquage"]
+            reine.save(
+                update_fields=["marquage_effectue", "date_marquage", "couleur_marquage"],
+            )
             if retour.startswith("colonie:"):
                 return redirect("gestion:fiche_colonie", colonie_id=retour[len("colonie:"):])
             return redirect("gestion:reines_a_marquer")
     else:
-        form = MarquerReineForm()
+        form = MarquerReineForm(reine=reine)
 
     return render(request, "gestion/marquer_reine_form.html", {
         "reine": reine,

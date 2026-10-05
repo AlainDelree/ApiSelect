@@ -316,5 +316,6 @@ dd { margin: 0; }
     padding: 0.8em 0; border-bottom: 1px solid var(--bordure);
 }
 .liste-reines-a-marquer li:last-child { border-bottom: none; }
-.reine-a-marquer-details { display: flex; align-items: center; gap: 0.5em; }
+.reine-a-marquer-details { display: flex; align-items: center; gap: 0.5em; flex-wrap: wrap; }
 .reine-a-marquer-lieu { color: var(--texte-attenue); font-size: 0.9em; }
+.reine-a-marquer-couleur { flex-basis: 100%; color: var(--texte-attenue); font-size: 0.9em; }

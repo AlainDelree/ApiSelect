@@ -25,6 +25,7 @@
             <span class="reine-a-marquer-details">
                 <span class="pastille-marquage pastille-marquage-vide" style="--couleur-marquage: {{ colonie.reine_actuelle.couleur_marquage|couleur_marquage }};" role="img" aria-label="Non marquée"></span>
                 <strong>{{ colonie.reine_actuelle.identifiant }}</strong>
+                <span class="reine-a-marquer-couleur">Couleur à utiliser : {{ colonie.reine_actuelle|couleur_a_utiliser }}</span>
                 <span class="reine-a-marquer-lieu">
                     {{ colonie.ruche.rucher.nom }} —
                     {{ colonie.ruche.type_ruche.libelle_affichage }} {{ colonie.ruche.numero }}

@@ -57,17 +57,9 @@
             <dt>Identifiant</dt><dd>{{ colonie.reine_actuelle.identifiant }}</dd>
             <dt>Marquage</dt>
             <dd>
-                {% if colonie.reine_actuelle.couleur_marquage %}
-                    <span class="pastille-marquage{% if not colonie.reine_actuelle.marquage_effectue %} pastille-marquage-vide{% endif %}" style="--couleur-marquage: {{ colonie.reine_actuelle.couleur_marquage|couleur_marquage }};"></span>
-                    {{ colonie.reine_actuelle.get_couleur_marquage_display }}
-                {% else %}
-                    non renseigné
-                {% endif %}
-            </dd>
-            <dt>Marquée</dt>
-            <dd>
                 {% if colonie.reine_actuelle.marquage_effectue %}
-                    Marquée le {{ colonie.reine_actuelle.date_marquage|default:"date inconnue" }}
+                    <span class="pastille-marquage" style="--couleur-marquage: {{ colonie.reine_actuelle.couleur_marquage|couleur_marquage }};"></span>
+                    Marquée en {{ colonie.reine_actuelle.couleur_marquage|nom_couleur_marquage }} le {{ colonie.reine_actuelle.date_marquage|default:"date inconnue" }}
                 {% else %}
                     Non marquée
                 {% endif %}

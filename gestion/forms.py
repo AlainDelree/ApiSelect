@@ -12,7 +12,15 @@ et sa certitude.
 from django import forms
 from django.utils import timezone
 
-from selection.models import MODES_ACQUISITION_ACHAT, ModeAcquisitionReine, Reine, StatutReine
+from selection.models import (
+    MODES_ACQUISITION_ACHAT,
+    CouleurMarquage,
+    ModeAcquisitionReine,
+    Reine,
+    StatutReine,
+)
+
+from .couleurs import couleur_marquage_proposee
 
 from .models import (
     CertitudeObservation,
@@ -211,6 +219,10 @@ class NouvelleReineForm(forms.Form):
         label="Date de fécondation", required=False,
         widget=forms.DateInput(attrs={"type": "date"}),
     )
+    date_naissance = forms.DateField(
+        label="Date de naissance", required=False,
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
     marquage_effectue = forms.TypedChoiceField(
         label="Marquage effectué",
         choices=CHOIX_OUI_NON, coerce=lambda valeur: valeur == "oui",
@@ -220,6 +232,10 @@ class NouvelleReineForm(forms.Form):
     date_marquage = forms.DateField(
         label="Date de marquage", required=False,
         widget=forms.DateInput(attrs={"type": "date"}),
+    )
+    couleur_marquage = forms.ChoiceField(
+        label="Couleur du marquage",
+        choices=[("", "—")] + list(CouleurMarquage.choices), required=False,
     )
 
     def __init__(self, *args, **kwargs):
@@ -253,17 +269,35 @@ class NouvelleReineForm(forms.Form):
                 self.add_error(
                     "vendeur", "Choisissez un vendeur ou renseignez-en un nouveau.",
                 )
-        if cleaned_data.get("marquage_effectue") and not cleaned_data.get("date_marquage"):
-            cleaned_data["date_marquage"] = cleaned_data.get("date_remplacement")
+        if cleaned_data.get("marquage_effectue"):
+            if not cleaned_data.get("date_marquage"):
+                cleaned_data["date_marquage"] = cleaned_data.get("date_remplacement")
+            if not cleaned_data.get("couleur_marquage"):
+                self.add_error(
+                    "couleur_marquage",
+                    "La couleur du marquage est obligatoire si le marquage "
+                    "est effectué.",
+                )
         return cleaned_data
 
 
 class MarquerReineForm(forms.Form):
-    """Page de confirmation du marquage d'une reine (issue #51) : date
-    proposée par défaut aujourd'hui, modifiable."""
+    """Page de confirmation du marquage d'une reine (issue #51), avec
+    couleur de marquage obligatoire proposée selon l'année de naissance
+    (issue #53) : date et couleur proposées par défaut, modifiables."""
 
     date_marquage = forms.DateField(
         label="Date de marquage",
         initial=timezone.localdate,
         widget=forms.DateInput(attrs={"type": "date"}),
     )
+    couleur_marquage = forms.ChoiceField(
+        label="Couleur du marquage", choices=CouleurMarquage.choices,
+    )
+
+    def __init__(self, *args, reine=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if reine is not None and not self.is_bound:
+            couleur_proposee = couleur_marquage_proposee(reine)
+            if couleur_proposee:
+                self.fields["couleur_marquage"].initial = couleur_proposee
