@@ -22,6 +22,28 @@ from selection.models import Colonie
 DELAI_RAPPEL_REINE_MORTE_JOURS = 9
 
 
+class Vendeur(models.Model):
+    """Vendeur d'une reine achetée (issue #51). Défini ici (gestion)
+    plutôt que dans `selection`, pour que ce soit `Reine` (dans
+    `selection`) qui référence `Vendeur` par une clé étrangère
+    différée ("gestion.Vendeur") — jamais l'inverse : ce module reste
+    sans import de `selection` au-delà de l'exception `Colonie`
+    ci-dessus, déjà documentée, et aucune dépendance circulaire n'est
+    créée entre les migrations des deux applications."""
+
+    nom = models.CharField(max_length=150)
+    telephone = models.CharField(max_length=30, blank=True)
+    adresse = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        verbose_name = "Vendeur"
+        verbose_name_plural = "Vendeurs"
+        ordering = ["nom"]
+
+    def __str__(self):
+        return self.nom
+
+
 class ObservationReine(models.TextChoices):
     VUE = "VUE", "Vue"
     OEUFS_VUS = "OEUFS_VUS", "Œufs vus"

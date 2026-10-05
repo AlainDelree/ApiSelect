@@ -177,6 +177,17 @@ class ModeAcquisitionReine(models.TextChoices):
         "REMERAGE_NATUREL",
         "Remérage naturel (par la colonie elle-même)",
     )
+    DONNEE = "DONNEE", "Donnée"
+
+
+# Sous-ensemble de `ModeAcquisitionReine` correspondant à un achat (issue
+# #51) : sert à savoir quand proposer le champ vendeur (formulaire de
+# remplacement de reine, bloc « Reine » de la fiche colonie).
+MODES_ACQUISITION_ACHAT = (
+    ModeAcquisitionReine.ACHETEE_CR,
+    ModeAcquisitionReine.ACHETEE_VIERGE,
+    ModeAcquisitionReine.ACHETEE_FECONDEE,
+)
 
 
 class Reine(models.Model):
@@ -215,12 +226,26 @@ class Reine(models.Model):
                    "existantes avant l'introduction de ce champ (issue "
                    "#25) — à compléter manuellement au besoin.",
     )
+    vendeur = models.ForeignKey(
+        "gestion.Vendeur", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="reines",
+        help_text="Pour une reine achetée (issue #51).",
+    )
     date_fecondation = models.DateField(null=True, blank=True)
     date_naissance = models.DateField(null=True, blank=True)
     date_deces = models.DateField(
         null=True, blank=True,
         help_text="Renseigné si la reine est morte ou a été remplacée.",
     )
+    marquage_effectue = models.BooleanField(
+        default=False,
+        help_text="La couleur du marquage (ci-dessus) reste déterminée "
+                   "par l'année de naissance ; ce champ indique si le "
+                   "marquage a été réellement posé (issue #51). Valeur "
+                   "par défaut 'non' sur les reines existantes avant "
+                   "l'introduction de ce champ, à corriger manuellement.",
+    )
+    date_marquage = models.DateField(null=True, blank=True)
     notes = models.TextField(blank=True)
 
     class Meta:
@@ -331,6 +356,13 @@ class EvenementColonie(models.Model):
         Reine, on_delete=models.SET_NULL, null=True, blank=True,
         related_name="+",
         help_text="Nouvelle reine installée, pour un remérage.",
+    )
+    ancienne_reine = models.ForeignKey(
+        Reine, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="+",
+        help_text="Reine remplacée, pour un remérage (issue #51) — "
+                   "conservée telle quelle, seulement détachée de la "
+                   "colonie.",
     )
     notes = models.TextField(blank=True)
 

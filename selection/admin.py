@@ -69,15 +69,17 @@ class StationFecondationAdmin(admin.ModelAdmin):
 @admin.register(Reine)
 class ReineAdmin(admin.ModelAdmin):
     list_display = [
-        "identifiant", "mere", "statut", "mode_acquisition",
-        "couleur_marquage", "date_naissance", "date_fecondation",
-        "station_fecondation", "date_deces",
+        "identifiant", "mere", "statut", "mode_acquisition", "vendeur",
+        "couleur_marquage", "marquage_effectue", "date_marquage",
+        "date_naissance", "date_fecondation", "station_fecondation", "date_deces",
     ]
     list_filter = [
-        "statut", "mode_acquisition", "couleur_marquage", "station_fecondation",
+        "statut", "mode_acquisition", "couleur_marquage", "marquage_effectue",
+        "station_fecondation",
     ]
+    list_editable = ["marquage_effectue", "date_marquage"]
     search_fields = ["identifiant", "lignee_male_probable"]
-    autocomplete_fields = ["mere", "station_fecondation"]
+    autocomplete_fields = ["mere", "station_fecondation", "vendeur"]
 
     class Media:
         js = ["selection/admin/reine_date_naissance.js"]

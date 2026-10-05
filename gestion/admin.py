@@ -11,7 +11,17 @@ restent possibles, à titre exceptionnel."""
 
 from django.contrib import admin
 
-from .models import ActionVisite, ObservationVisite, RappelRevisite, Visite
+from .models import ActionVisite, ObservationVisite, RappelRevisite, Vendeur, Visite
+
+
+@admin.register(Vendeur)
+class VendeurAdmin(admin.ModelAdmin):
+    """Un vendeur se crée normalement depuis le formulaire de
+    remplacement de reine (fiche colonie, issue #51) ; cet écran reste
+    disponible pour les corrections exceptionnelles."""
+
+    list_display = ["nom", "telephone", "adresse"]
+    search_fields = ["nom"]
 
 
 class ActionVisiteInline(admin.TabularInline):
