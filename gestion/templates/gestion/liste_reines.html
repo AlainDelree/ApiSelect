@@ -1,0 +1,66 @@
+{% load static gestion_extras %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Reines — ApiSelect</title>
+    <link rel="stylesheet" href="{% static 'gestion/style.css' %}">
+</head>
+<body{% if BASE_DE_TEST_ACTIVE %} class="avec-bandeau"{% endif %}>
+    {% if BASE_DE_TEST_ACTIVE %}
+    <div class="bandeau-base-test">⚠️ BASE DE TEST — données fictives</div>
+    {% endif %}
+
+    <p class="lien-retour"><a href="{% url 'gestion:accueil' %}">&larr; Retour à l'accueil</a></p>
+
+    <h1>Reines</h1>
+
+    <p>
+        <a class="bouton-nouvelle-reine" href="{% url 'gestion:ajouter_reine' %}">
+            + Ajouter une reine
+        </a>
+    </p>
+
+    {% if not lignes %}
+    <p class="message-vide">Aucune reine enregistrée.</p>
+    {% else %}
+    <ul class="liste-reines">
+        {% for ligne in lignes %}
+        <li>
+            <span class="reine-details">
+                {% if ligne.reine.marquage_effectue %}
+                <span class="pastille-marquage" style="--couleur-marquage: {{ ligne.reine.couleur_marquage|couleur_marquage }};" role="img" aria-label="Marquée"></span>
+                {% else %}
+                <span class="pastille-marquage pastille-marquage-vide" style="--couleur-marquage: {{ ligne.reine.couleur_marquage|couleur_marquage }};" role="img" aria-label="Non marquée"></span>
+                {% endif %}
+                <strong>{{ ligne.reine.identifiant }}</strong>
+                <span class="reine-colonie">
+                    {% if ligne.colonie %}
+                        {{ ligne.colonie.ruche.type_ruche.libelle_affichage }} {{ ligne.colonie.ruche.numero }}
+                        {% if ligne.colonie.ruche.rucher %}({{ ligne.colonie.ruche.rucher.nom }}){% endif %}
+                    {% else %}
+                        sans colonie
+                    {% endif %}
+                </span>
+                <span class="reine-origine">{{ ligne.reine.get_mode_acquisition_display|default:"origine non renseignée" }}</span>
+                {% if ligne.reine.vendeur %}
+                <span class="reine-vendeur">{{ ligne.reine.vendeur.nom }}</span>
+                {% endif %}
+                <span class="reine-naissance">
+                    {% if ligne.reine.date_naissance %}
+                        née le {{ ligne.reine.date_naissance }}
+                    {% else %}
+                        date de naissance non renseignée
+                    {% endif %}
+                </span>
+            </span>
+            <a class="bouton-marquer-reine" href="{% url 'gestion:modifier_reine' ligne.reine.id %}?retour=reines">
+                Modifier
+            </a>
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+</body>
+</html>

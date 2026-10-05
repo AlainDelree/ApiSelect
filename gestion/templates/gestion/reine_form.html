@@ -1,0 +1,39 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% if reine.pk %}Modifier {{ reine.identifiant }}{% else %}Ajouter une reine{% endif %} — ApiSelect</title>
+    <link rel="stylesheet" href="{% static 'gestion/style.css' %}">
+</head>
+<body{% if BASE_DE_TEST_ACTIVE %} class="avec-bandeau"{% endif %}>
+    {% if BASE_DE_TEST_ACTIVE %}
+    <div class="bandeau-base-test">⚠️ BASE DE TEST — données fictives</div>
+    {% endif %}
+
+    {% if retour|slice:":8" == "colonie:" %}
+    <p class="lien-retour">
+        <a href="{% url 'gestion:fiche_colonie' retour|slice:"8:" %}">&larr; Retour à la fiche colonie</a>
+    </p>
+    {% else %}
+    <p class="lien-retour">
+        <a href="{% url 'gestion:liste_reines' %}">&larr; Retour aux reines</a>
+    </p>
+    {% endif %}
+
+    <h1>{% if reine.pk %}Modifier la reine {{ reine.identifiant }}{% else %}Ajouter une reine{% endif %}</h1>
+
+    <form method="post" id="formulaire-reine">
+        {% csrf_token %}
+        {% if retour %}<input type="hidden" name="retour" value="{{ retour }}">{% endif %}
+
+        {% include "gestion/_champs_reine.html" with form=form %}
+
+        <button type="submit" class="bouton-enregistrer">Enregistrer</button>
+    </form>
+
+    <script src="{% static 'gestion/reine_champs.js' %}"></script>
+    <script src="{% static 'gestion/reine_form.js' %}"></script>
+</body>
+</html>

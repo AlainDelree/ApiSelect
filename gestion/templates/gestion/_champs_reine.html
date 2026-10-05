@@ -1,0 +1,96 @@
+{% comment %}
+Champs propres à une reine (issue #54), communs aux trois formulaires :
+création et modification (« Reines » et fiche colonie, `reine_form.html`)
+et remplacement (`nouvelle_reine_form.html`, bloc « nouvelle reine »).
+Reçoit `form`, une instance de `ReineForm` (ou de `NouvelleReineForm`,
+qui en hérite) — aucun champ ici qui ne soit pas dans `ReineForm.Meta.fields`.
+{% endcomment %}
+<div class="champ-visite">
+    <label for="{{ form.identifiant.id_for_label }}">{{ form.identifiant.label }}</label>
+    {{ form.identifiant }}
+    {% if form.identifiant.errors %}
+    <p class="erreur-champ">{{ form.identifiant.errors|striptags }}</p>
+    {% endif %}
+</div>
+
+<div class="champ-visite">
+    <label for="{{ form.mere.id_for_label }}">{{ form.mere.label }}</label>
+    {{ form.mere }}
+</div>
+
+<div class="champ-visite">
+    <p class="etiquette">{{ form.statut.label }}</p>
+    {{ form.statut }}
+</div>
+
+<div class="champ-visite">
+    <p class="etiquette">{{ form.mode_acquisition.label }}</p>
+    {{ form.mode_acquisition }}
+</div>
+
+<div class="sous-question" id="bloc-vendeur">
+    <div class="champ-visite">
+        <label for="{{ form.vendeur.id_for_label }}">{{ form.vendeur.label }}</label>
+        {{ form.vendeur }}
+        {% if form.vendeur.errors %}
+        <p class="erreur-champ">{{ form.vendeur.errors|striptags }}</p>
+        {% endif %}
+    </div>
+    <p class="notes">Ou un nouveau vendeur :</p>
+    <div class="champ-visite">
+        <label for="{{ form.nouveau_vendeur_nom.id_for_label }}">{{ form.nouveau_vendeur_nom.label }}</label>
+        {{ form.nouveau_vendeur_nom }}
+    </div>
+    <div class="champ-visite">
+        <label for="{{ form.nouveau_vendeur_telephone.id_for_label }}">{{ form.nouveau_vendeur_telephone.label }}</label>
+        {{ form.nouveau_vendeur_telephone }}
+    </div>
+    <div class="champ-visite">
+        <label for="{{ form.nouveau_vendeur_adresse.id_for_label }}">{{ form.nouveau_vendeur_adresse.label }}</label>
+        {{ form.nouveau_vendeur_adresse }}
+    </div>
+</div>
+
+<div class="champ-visite">
+    <label for="{{ form.date_naissance.id_for_label }}">{{ form.date_naissance.label }}</label>
+    {{ form.date_naissance }}
+</div>
+
+<div class="champ-visite">
+    <label for="{{ form.date_fecondation.id_for_label }}">{{ form.date_fecondation.label }}</label>
+    {{ form.date_fecondation }}
+</div>
+
+<div class="champ-visite">
+    <label for="{{ form.station_fecondation.id_for_label }}">{{ form.station_fecondation.label }}</label>
+    {{ form.station_fecondation }}
+</div>
+
+<fieldset class="champ-visite">
+    <legend class="etiquette">{{ form.marquage_effectue.label }}</legend>
+    {{ form.marquage_effectue }}
+    <div class="sous-question" id="bloc-date-marquage">
+        <label for="{{ form.date_marquage.id_for_label }}">{{ form.date_marquage.label }}</label>
+        {{ form.date_marquage }}
+        <label for="{{ form.couleur_marquage.id_for_label }}">{{ form.couleur_marquage.label }}</label>
+        {{ form.couleur_marquage }}
+        {% if form.couleur_marquage.errors %}
+        <p class="erreur-champ">{{ form.couleur_marquage.errors|striptags }}</p>
+        {% endif %}
+    </div>
+</fieldset>
+
+<div class="champ-visite">
+    <label for="{{ form.lignee_male_probable.id_for_label }}">{{ form.lignee_male_probable.label }}</label>
+    {{ form.lignee_male_probable }}
+</div>
+
+<div class="champ-visite">
+    <label for="{{ form.date_deces.id_for_label }}">{{ form.date_deces.label }}</label>
+    {{ form.date_deces }}
+</div>
+
+<div class="champ-visite">
+    <label for="{{ form.notes.id_for_label }}">{{ form.notes.label }}</label>
+    {{ form.notes }}
+</div>
