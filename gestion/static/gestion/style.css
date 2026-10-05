@@ -122,13 +122,6 @@ a.tuile:hover {
 }
 .tuile-reine-absente { color: var(--texte-attenue); font-style: italic; }
 .tuile-reine-morte { color: var(--texte-attenue); }
-.tuile-reine-morte .pastille-marquage { opacity: 0.5; }
-.etiquette-morte { font-style: italic; }
-
-.tuile-signal-reine-morte {
-    display: flex; align-items: center; gap: 0.35em;
-    font-size: 0.85em; font-weight: bold; color: #c62828; margin: 0.3em 0 0;
-}
 .icone-reine-morte { color: #c62828; flex: 0 0 auto; }
 .tuile-statut {
     color: var(--texte-attenue); font-weight: bold;

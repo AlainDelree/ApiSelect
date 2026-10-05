@@ -1362,9 +1362,11 @@ class SignalReineMorteTests(TestCase):
             reverse("gestion:fiche_colonie", args=[self.colonie.id])
         )
 
-        self.assertContains(accueil, "icone-reine-morte")
-        self.assertContains(accueil, "Reine morte")
-        self.assertContains(accueil, "(morte)")
+        self.assertContains(accueil, "icone-reine-morte", count=1)
+        self.assertContains(accueil, "Reine morte confirmée")
+        self.assertNotContains(accueil, "(morte)")
+        self.assertNotContains(accueil, "tuile-signal-reine-morte")
+        self.assertNotContains(accueil, "pastille-marquage")
         self.assertContains(fiche, "Reine morte confirmée le")
 
     def test_pas_de_signal_pour_observation_ouverte(self):
