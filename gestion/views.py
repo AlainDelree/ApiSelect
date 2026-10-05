@@ -10,18 +10,34 @@ sélection génétique.
 """
 
 from django.db.models import Prefetch
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
-from selection.models import Colonie, EvenementColonie, Ruche, Rucher, TypeEvenementColonie
+from selection.calculs import suggerer_identifiant_fille
+from selection.models import (
+    Colonie,
+    EvenementColonie,
+    Reine,
+    Ruche,
+    Rucher,
+    TypeEvenementColonie,
+)
 
-from .forms import RevisiteReineMorteForm, VisiteForm, initial_observations_depuis_visite
+from .forms import (
+    MarquerReineForm,
+    NouvelleReineForm,
+    RevisiteReineMorteForm,
+    VisiteForm,
+    initial_observations_depuis_visite,
+)
 from .models import (
     ActionVisite,
     ObservationVisite,
     RappelRevisite,
     StatutObservation,
     TypeObservationVisite,
+    Vendeur,
     Visite,
     date_revisite_par_defaut,
 )
@@ -150,6 +166,9 @@ def accueil(request):
         "sections": sections,
         "nb_colonies_actives": Colonie.objects.filter(active=True).count(),
         "nb_ruchers": Rucher.objects.count(),
+        "nb_reines_non_marquees": Colonie.objects.filter(
+            active=True, reine_actuelle__marquage_effectue=False,
+        ).count(),
         "rappels_a_revisiter": rappels_a_revisiter,
     })
 
@@ -161,7 +180,10 @@ def fiche_colonie(request, colonie_id):
     (confirmer/infirmer, date de revérification)."""
     colonie = get_object_or_404(
         Colonie.objects
-        .select_related("ruche__type_ruche", "ruche__rucher", "reine_actuelle__mere")
+        .select_related(
+            "ruche__type_ruche", "ruche__rucher",
+            "reine_actuelle__mere", "reine_actuelle__vendeur",
+        )
         .prefetch_related(
             "configurations",
             "evenements",
@@ -358,3 +380,118 @@ def infirmer_observation(request, observation_id):
         observation.infirmer()
         _cloturer_rappel(observation)
     return redirect("gestion:fiche_colonie", colonie_id=observation.colonie_id)
+
+
+def nouvelle_reine(request, colonie_id):
+    """Formulaire de remplacement de reine depuis la fiche colonie
+    (issue #51), à grands boutons comme celui de visite. À
+    l'enregistrement : la nouvelle reine devient la reine actuelle de
+    la colonie, un événement de remérage est créé à la date choisie en
+    conservant la trace de l'ancienne reine (`EvenementColonie.
+    ancienne_reine`), et cette dernière n'est ni supprimée ni modifiée
+    — seulement détachée de la colonie. Ce remérage fait disparaître le
+    signal « reine morte » de l'issue #50, qui ne ressort plus dès
+    qu'un tel événement existe à une date égale ou postérieure à
+    l'observation confirmée (cf. `_observation_reine_morte_confirmee_
+    sans_remplacement`)."""
+    colonie = get_object_or_404(
+        Colonie.objects.select_related("ruche__type_ruche", "reine_actuelle"),
+        pk=colonie_id,
+    )
+    if request.method == "POST":
+        form = NouvelleReineForm(request.POST)
+        if form.is_valid():
+            data = form.cleaned_data
+            if data["origine"] == "EXISTANTE":
+                reine = data["reine_existante"]
+            else:
+                vendeur = data.get("vendeur")
+                if vendeur is None and data.get("nouveau_vendeur_nom"):
+                    vendeur = Vendeur.objects.create(
+                        nom=data["nouveau_vendeur_nom"],
+                        telephone=data.get("nouveau_vendeur_telephone", ""),
+                        adresse=data.get("nouveau_vendeur_adresse", ""),
+                    )
+                reine = Reine.objects.create(
+                    identifiant=data["identifiant"],
+                    mere=data.get("mere"),
+                    mode_acquisition=data.get("mode_acquisition") or "",
+                    vendeur=vendeur,
+                    statut=data.get("statut") or None,
+                    date_fecondation=data.get("date_fecondation"),
+                    marquage_effectue=data["marquage_effectue"],
+                    date_marquage=data.get("date_marquage"),
+                )
+
+            ancienne_reine = colonie.reine_actuelle
+            colonie.reine_actuelle = reine
+            colonie.save(update_fields=["reine_actuelle"])
+
+            EvenementColonie.objects.create(
+                colonie=colonie,
+                date=data["date_remplacement"],
+                type_evenement=TypeEvenementColonie.REMERAGE,
+                reine=reine,
+                ancienne_reine=ancienne_reine,
+            )
+            return redirect("gestion:fiche_colonie", colonie_id=colonie.id)
+    else:
+        form = NouvelleReineForm()
+
+    return render(request, "gestion/nouvelle_reine_form.html", {
+        "colonie": colonie,
+        "form": form,
+    })
+
+
+def suggestion_identifiant_reine(request):
+    """Petit point d'entrée JSON utilisé en amélioration progressive
+    par le formulaire de remplacement de reine (issue #51) : réutilise
+    la logique de suggestion existante (`suggerer_identifiant_fille`,
+    déjà en place pour les cellules royales devenues reines) quand une
+    mère est choisie. Sans JavaScript, l'identifiant reste à saisir à
+    la main — aucune fonctionnalité perdue."""
+    try:
+        mere = Reine.objects.get(pk=request.GET.get("mere_id"))
+        annee = int(request.GET.get("annee"))
+    except (Reine.DoesNotExist, TypeError, ValueError):
+        return JsonResponse({"identifiant": ""})
+    return JsonResponse({"identifiant": suggerer_identifiant_fille(mere, annee)})
+
+
+def marquer_reine(request, reine_id):
+    """Page de confirmation du marquage d'une reine (issue #51),
+    atteinte depuis le bouton « Marquer la reine » de la fiche colonie
+    ou depuis la liste « Reines à marquer » — `retour` indique où
+    revenir après l'enregistrement."""
+    reine = get_object_or_404(Reine, pk=reine_id)
+    retour = request.GET.get("retour") or request.POST.get("retour") or ""
+
+    if request.method == "POST":
+        form = MarquerReineForm(request.POST)
+        if form.is_valid():
+            reine.marquage_effectue = True
+            reine.date_marquage = form.cleaned_data["date_marquage"]
+            reine.save(update_fields=["marquage_effectue", "date_marquage"])
+            if retour.startswith("colonie:"):
+                return redirect("gestion:fiche_colonie", colonie_id=retour[len("colonie:"):])
+            return redirect("gestion:reines_a_marquer")
+    else:
+        form = MarquerReineForm()
+
+    return render(request, "gestion/marquer_reine_form.html", {
+        "reine": reine,
+        "form": form,
+        "retour": retour,
+    })
+
+
+def reines_a_marquer(request):
+    """Liste des reines non marquées des colonies actives (issue #51),
+    atteinte depuis le compteur de l'accueil."""
+    colonies = (
+        Colonie.objects.filter(active=True, reine_actuelle__marquage_effectue=False)
+        .select_related("reine_actuelle", "ruche__type_ruche", "ruche__rucher")
+        .order_by("ruche__rucher__nom", "ruche__numero")
+    )
+    return render(request, "gestion/reines_a_marquer.html", {"colonies": colonies})

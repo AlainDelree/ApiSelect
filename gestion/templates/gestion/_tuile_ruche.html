@@ -12,7 +12,11 @@
         {% if colonie %}
             {% if colonie.reine_actuelle %}
             <p class="tuile-reine{% if tuile.observation_reine_morte_confirmee %} tuile-reine-morte{% endif %}">
-                <span class="pastille-marquage" style="--couleur-marquage: {{ colonie.reine_actuelle.couleur_marquage|couleur_marquage }};"></span>
+                {% if colonie.reine_actuelle.marquage_effectue %}
+                <span class="pastille-marquage" style="--couleur-marquage: {{ colonie.reine_actuelle.couleur_marquage|couleur_marquage }};" role="img" aria-label="Marquée"></span>
+                {% else %}
+                <span class="pastille-marquage pastille-marquage-vide" style="--couleur-marquage: {{ colonie.reine_actuelle.couleur_marquage|couleur_marquage }};" role="img" aria-label="Non marquée"></span>
+                {% endif %}
                 {{ colonie.reine_actuelle.identifiant }}
                 {% if tuile.observation_reine_morte_confirmee %}<span class="etiquette-morte">(morte)</span>{% endif %}
             </p>

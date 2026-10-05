@@ -144,6 +144,13 @@ a.tuile:hover {
     flex: 0 0 auto;
 }
 
+/* Reine non marquée (issue #51) : pastille vide, contour seulement,
+   dans la couleur que prendrait le marquage une fois posé. */
+.pastille-marquage-vide {
+    background: transparent;
+    border: 2px solid var(--couleur-marquage, var(--couleur-ruche, var(--couleur-neutre)));
+}
+
 .message-vide { color: var(--texte-attenue); font-style: italic; }
 .signal-reine-morte { color: #c62828; font-weight: bold; margin: 0.6em 0 0; }
 
@@ -168,7 +175,7 @@ dd { margin: 0; }
 /* Formulaire de visite à grands boutons à toucher (issue #43). */
 
 .bouton-nouvelle-visite {
-    display: inline-block; margin: 0 0 1.2em; padding: 0.9em 1.4em;
+    display: inline-block; margin: 0 0.8em 1.2em 0; padding: 0.9em 1.4em;
     background: var(--lien); color: #fff; text-decoration: none;
     border-radius: 10px; font-size: 1.1em; font-weight: bold;
 }
@@ -184,6 +191,8 @@ dd { margin: 0; }
 }
 .champ-visite input[type="number"],
 .champ-visite input[type="date"],
+.champ-visite input[type="text"],
+.champ-visite select,
 .champ-visite textarea {
     font-size: 1.1em; padding: 0.6em; width: 100%; max-width: 320px;
     border: 2px solid var(--bordure); border-radius: 8px;
@@ -293,3 +302,26 @@ dd { margin: 0; }
     display: inline-block; margin-left: 0.8em; padding: 0.8em 1.6em;
     color: var(--texte); text-decoration: none;
 }
+
+/* Remplacement de reine et marquage (issue #51). */
+
+.bouton-nouvelle-reine, .bouton-marquer-reine {
+    display: inline-block; padding: 0.7em 1.2em;
+    background: var(--lien); color: #fff; text-decoration: none;
+    border-radius: 10px; font-weight: bold; font-size: 1em;
+}
+.bouton-nouvelle-reine { margin: 0 0 1.2em; }
+.bouton-marquer-reine { margin-top: 0.6em; }
+
+.compteur-a-marquer { margin-top: 0.3em; }
+.compteur-a-marquer a { font-weight: bold; }
+
+.liste-reines-a-marquer { list-style: none; margin: 0; padding: 0; }
+.liste-reines-a-marquer li {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 1em; flex-wrap: wrap;
+    padding: 0.8em 0; border-bottom: 1px solid var(--bordure);
+}
+.liste-reines-a-marquer li:last-child { border-bottom: none; }
+.reine-a-marquer-details { display: flex; align-items: center; gap: 0.5em; }
+.reine-a-marquer-lieu { color: var(--texte-attenue); font-size: 0.9em; }

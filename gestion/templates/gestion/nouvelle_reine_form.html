@@ -1,0 +1,124 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Nouvelle reine — {{ colonie }} — ApiSelect</title>
+    <link rel="stylesheet" href="{% static 'gestion/style.css' %}">
+</head>
+<body{% if BASE_DE_TEST_ACTIVE %} class="avec-bandeau"{% endif %}>
+    {% if BASE_DE_TEST_ACTIVE %}
+    <div class="bandeau-base-test">⚠️ BASE DE TEST — données fictives</div>
+    {% endif %}
+
+    <p class="lien-retour">
+        <a href="{% url 'gestion:fiche_colonie' colonie.id %}">&larr; Retour à la fiche colonie</a>
+    </p>
+
+    <div class="en-tete-ruche"{% if colonie.ruche.couleur %} style="--couleur-ruche: {{ colonie.ruche.couleur }};"{% endif %}>
+        {% if colonie.ruche.couleur %}<span class="pastille-ruche"></span>{% endif %}
+        <h1>
+            {{ colonie.ruche.type_ruche.libelle_affichage }} {{ colonie.ruche.numero }} — Nouvelle reine
+        </h1>
+    </div>
+
+    {% if colonie.reine_actuelle %}
+    <p class="notes">
+        Reine actuelle : {{ colonie.reine_actuelle.identifiant }} — elle sera détachée de la
+        colonie (conservée telle quelle) et remplacée par celle choisie ci-dessous.
+    </p>
+    {% endif %}
+
+    <form method="post" id="formulaire-nouvelle-reine" data-url-suggestion="{% url 'gestion:suggestion_identifiant_reine' %}">
+        {% csrf_token %}
+
+        <div class="champ-visite">
+            <label for="{{ form.date_remplacement.id_for_label }}">{{ form.date_remplacement.label }}</label>
+            {{ form.date_remplacement }}
+            {% if form.date_remplacement.errors %}
+            <p class="erreur-champ">{{ form.date_remplacement.errors|striptags }}</p>
+            {% endif %}
+        </div>
+
+        <div class="champ-visite">
+            <p class="etiquette">{{ form.origine.label }}</p>
+            {{ form.origine }}
+        </div>
+
+        <div class="champ-visite sous-question" id="bloc-reine-existante">
+            <label for="{{ form.reine_existante.id_for_label }}">{{ form.reine_existante.label }}</label>
+            {{ form.reine_existante }}
+            {% if form.reine_existante.errors %}
+            <p class="erreur-champ">{{ form.reine_existante.errors|striptags }}</p>
+            {% endif %}
+        </div>
+
+        <div id="bloc-nouvelle-reine">
+            <div class="champ-visite">
+                <label for="{{ form.identifiant.id_for_label }}">{{ form.identifiant.label }}</label>
+                {{ form.identifiant }}
+                {% if form.identifiant.errors %}
+                <p class="erreur-champ">{{ form.identifiant.errors|striptags }}</p>
+                {% endif %}
+            </div>
+
+            <div class="champ-visite">
+                <label for="{{ form.mere.id_for_label }}">{{ form.mere.label }}</label>
+                {{ form.mere }}
+            </div>
+
+            <div class="champ-visite">
+                <p class="etiquette">{{ form.mode_acquisition.label }}</p>
+                {{ form.mode_acquisition }}
+            </div>
+
+            <div class="sous-question" id="bloc-vendeur">
+                <div class="champ-visite">
+                    <label for="{{ form.vendeur.id_for_label }}">{{ form.vendeur.label }}</label>
+                    {{ form.vendeur }}
+                    {% if form.vendeur.errors %}
+                    <p class="erreur-champ">{{ form.vendeur.errors|striptags }}</p>
+                    {% endif %}
+                </div>
+                <p class="notes">Ou un nouveau vendeur :</p>
+                <div class="champ-visite">
+                    <label for="{{ form.nouveau_vendeur_nom.id_for_label }}">{{ form.nouveau_vendeur_nom.label }}</label>
+                    {{ form.nouveau_vendeur_nom }}
+                </div>
+                <div class="champ-visite">
+                    <label for="{{ form.nouveau_vendeur_telephone.id_for_label }}">{{ form.nouveau_vendeur_telephone.label }}</label>
+                    {{ form.nouveau_vendeur_telephone }}
+                </div>
+                <div class="champ-visite">
+                    <label for="{{ form.nouveau_vendeur_adresse.id_for_label }}">{{ form.nouveau_vendeur_adresse.label }}</label>
+                    {{ form.nouveau_vendeur_adresse }}
+                </div>
+            </div>
+
+            <div class="champ-visite">
+                <p class="etiquette">{{ form.statut.label }}</p>
+                {{ form.statut }}
+            </div>
+
+            <div class="champ-visite">
+                <label for="{{ form.date_fecondation.id_for_label }}">{{ form.date_fecondation.label }}</label>
+                {{ form.date_fecondation }}
+            </div>
+
+            <fieldset class="champ-visite">
+                <legend class="etiquette">{{ form.marquage_effectue.label }}</legend>
+                {{ form.marquage_effectue }}
+                <div class="sous-question" id="bloc-date-marquage">
+                    <label for="{{ form.date_marquage.id_for_label }}">{{ form.date_marquage.label }}</label>
+                    {{ form.date_marquage }}
+                </div>
+            </fieldset>
+        </div>
+
+        <button type="submit" class="bouton-enregistrer">Enregistrer le remplacement</button>
+    </form>
+
+    <script src="{% static 'gestion/nouvelle_reine.js' %}"></script>
+</body>
+</html>

@@ -26,6 +26,9 @@
         <a class="bouton-nouvelle-visite" href="{% url 'gestion:nouvelle_visite' colonie.id %}">
             + Nouvelle visite
         </a>
+        <a class="bouton-nouvelle-reine" href="{% url 'gestion:nouvelle_reine' colonie.id %}">
+            + Nouvelle reine
+        </a>
     </p>
 
     <section class="fiche-bloc">
@@ -55,17 +58,35 @@
             <dt>Marquage</dt>
             <dd>
                 {% if colonie.reine_actuelle.couleur_marquage %}
-                    <span class="pastille-marquage" style="--couleur-marquage: {{ colonie.reine_actuelle.couleur_marquage|couleur_marquage }};"></span>
+                    <span class="pastille-marquage{% if not colonie.reine_actuelle.marquage_effectue %} pastille-marquage-vide{% endif %}" style="--couleur-marquage: {{ colonie.reine_actuelle.couleur_marquage|couleur_marquage }};"></span>
                     {{ colonie.reine_actuelle.get_couleur_marquage_display }}
                 {% else %}
                     non renseigné
                 {% endif %}
             </dd>
+            <dt>Marquée</dt>
+            <dd>
+                {% if colonie.reine_actuelle.marquage_effectue %}
+                    Marquée le {{ colonie.reine_actuelle.date_marquage|default:"date inconnue" }}
+                {% else %}
+                    Non marquée
+                {% endif %}
+            </dd>
             <dt>Mère</dt><dd>{{ colonie.reine_actuelle.mere|default:"inconnue" }}</dd>
             <dt>Mode d'acquisition</dt><dd>{{ colonie.reine_actuelle.get_mode_acquisition_display|default:"non renseigné" }}</dd>
+            {% if colonie.reine_actuelle.vendeur %}
+            <dt>Vendeur</dt><dd>{{ colonie.reine_actuelle.vendeur.nom }}</dd>
+            {% endif %}
             <dt>Statut</dt><dd>{{ colonie.reine_actuelle.get_statut_display|default:"non renseigné" }}</dd>
             <dt>Date de fécondation</dt><dd>{{ colonie.reine_actuelle.date_fecondation|default:"non renseignée" }}</dd>
         </dl>
+        {% if not colonie.reine_actuelle.marquage_effectue %}
+        <p>
+            <a class="bouton-marquer-reine" href="{% url 'gestion:marquer_reine' colonie.reine_actuelle.id %}?retour=colonie:{{ colonie.id }}">
+                Marquer la reine
+            </a>
+        </p>
+        {% endif %}
         {% else %}
         <p class="message-vide">Aucune reine renseignée pour cette colonie.</p>
         {% endif %}

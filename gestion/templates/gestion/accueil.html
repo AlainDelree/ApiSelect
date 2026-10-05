@@ -19,6 +19,13 @@
             ·
             {{ nb_ruchers }} rucher{{ nb_ruchers|pluralize }}
         </p>
+        {% if nb_reines_non_marquees %}
+        <p class="compteurs compteur-a-marquer">
+            <a href="{% url 'gestion:reines_a_marquer' %}">
+                {{ nb_reines_non_marquees }} reine{{ nb_reines_non_marquees|pluralize }} non marquée{{ nb_reines_non_marquees|pluralize }}
+            </a>
+        </p>
+        {% endif %}
         <p class="lien-admin"><a href="{% url 'admin:index' %}">Administration &rarr;</a></p>
     </header>
 

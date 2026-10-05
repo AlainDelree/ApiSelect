@@ -12,6 +12,22 @@ urlpatterns = [
         views.nouvelle_visite, name="nouvelle_visite",
     ),
     path(
+        "colonies/<int:colonie_id>/nouvelle-reine/",
+        views.nouvelle_reine, name="nouvelle_reine",
+    ),
+    path(
+        "reines-a-marquer/",
+        views.reines_a_marquer, name="reines_a_marquer",
+    ),
+    path(
+        "reines/<int:reine_id>/marquer/",
+        views.marquer_reine, name="marquer_reine",
+    ),
+    path(
+        "suggestion-identifiant/",
+        views.suggestion_identifiant_reine, name="suggestion_identifiant_reine",
+    ),
+    path(
         "colonies/<int:colonie_id>/visites/<int:visite_id>/modifier/",
         views.modifier_visite, name="modifier_visite",
     ),

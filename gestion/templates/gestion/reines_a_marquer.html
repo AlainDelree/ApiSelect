@@ -1,0 +1,41 @@
+{% load static gestion_extras %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Reines à marquer — ApiSelect</title>
+    <link rel="stylesheet" href="{% static 'gestion/style.css' %}">
+</head>
+<body{% if BASE_DE_TEST_ACTIVE %} class="avec-bandeau"{% endif %}>
+    {% if BASE_DE_TEST_ACTIVE %}
+    <div class="bandeau-base-test">⚠️ BASE DE TEST — données fictives</div>
+    {% endif %}
+
+    <p class="lien-retour"><a href="{% url 'gestion:accueil' %}">&larr; Retour à l'accueil</a></p>
+
+    <h1>Reines à marquer</h1>
+
+    {% if not colonies %}
+    <p class="message-vide">Aucune reine non marquée parmi les colonies actives.</p>
+    {% else %}
+    <ul class="liste-reines-a-marquer">
+        {% for colonie in colonies %}
+        <li>
+            <span class="reine-a-marquer-details">
+                <span class="pastille-marquage pastille-marquage-vide" style="--couleur-marquage: {{ colonie.reine_actuelle.couleur_marquage|couleur_marquage }};" role="img" aria-label="Non marquée"></span>
+                <strong>{{ colonie.reine_actuelle.identifiant }}</strong>
+                <span class="reine-a-marquer-lieu">
+                    {{ colonie.ruche.rucher.nom }} —
+                    {{ colonie.ruche.type_ruche.libelle_affichage }} {{ colonie.ruche.numero }}
+                </span>
+            </span>
+            <a class="bouton-marquer-reine" href="{% url 'gestion:marquer_reine' colonie.reine_actuelle.id %}?retour=colonie:{{ colonie.id }}">
+                Marquer
+            </a>
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+</body>
+</html>

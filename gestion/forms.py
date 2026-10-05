@@ -10,6 +10,9 @@ et sa certitude.
 """
 
 from django import forms
+from django.utils import timezone
+
+from selection.models import MODES_ACQUISITION_ACHAT, ModeAcquisitionReine, Reine, StatutReine
 
 from .models import (
     CertitudeObservation,
@@ -19,6 +22,7 @@ from .models import (
     ReponseCellulesRoyales,
     TypeActionVisite,
     TypeObservationVisite,
+    Vendeur,
     Visite,
     date_revisite_par_defaut,
 )
@@ -141,4 +145,125 @@ class RevisiteReineMorteForm(forms.Form):
         choices=CHOIX_OUI_NON,
         coerce=lambda valeur: valeur == "oui",
         widget=forms.RadioSelect(attrs={"class": "groupe-choix"}),
+    )
+
+
+CHOIX_ORIGINE_REINE = [
+    ("EXISTANTE", "Reine déjà enregistrée, non affectée"),
+    ("NOUVELLE", "Nouvelle reine à créer"),
+]
+
+
+class NouvelleReineForm(forms.Form):
+    """Formulaire de remplacement de reine depuis la fiche colonie
+    (issue #51), à grands boutons comme le formulaire de visite : soit
+    une reine déjà enregistrée et non affectée à une colonie active
+    (ex. issue d'une cellule royale devenue reine), soit une nouvelle
+    reine créée dans la foulée. Pour un achat, le vendeur se choisit
+    dans la liste ou se crée directement ici — pas de second écran de
+    saisie."""
+
+    date_remplacement = forms.DateField(
+        label="Date de remplacement",
+        initial=timezone.localdate,
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+    origine = forms.ChoiceField(
+        label="Reine",
+        choices=CHOIX_ORIGINE_REINE,
+        initial="NOUVELLE",
+        widget=forms.RadioSelect(attrs={"class": "groupe-choix"}),
+    )
+    reine_existante = forms.ModelChoiceField(
+        label="Reine déjà enregistrée",
+        queryset=Reine.objects.all(), required=False,
+    )
+    identifiant = forms.CharField(
+        label="Identifiant de la nouvelle reine", max_length=50, required=False,
+    )
+    mere = forms.ModelChoiceField(
+        label="Mère (si connue)", queryset=Reine.objects.all(), required=False,
+    )
+    mode_acquisition = forms.ChoiceField(
+        label="Mode d'acquisition",
+        choices=[("", "Non renseigné")] + list(ModeAcquisitionReine.choices),
+        required=False,
+        widget=forms.RadioSelect(attrs={"class": "groupe-choix"}),
+    )
+    vendeur = forms.ModelChoiceField(
+        label="Vendeur déjà enregistré", queryset=Vendeur.objects.all(), required=False,
+    )
+    nouveau_vendeur_nom = forms.CharField(
+        label="Ou nouveau vendeur — nom", max_length=150, required=False,
+    )
+    nouveau_vendeur_telephone = forms.CharField(
+        label="Téléphone du vendeur", max_length=30, required=False,
+    )
+    nouveau_vendeur_adresse = forms.CharField(
+        label="Adresse du vendeur", max_length=255, required=False,
+    )
+    statut = forms.ChoiceField(
+        label="Statut",
+        choices=[("", "Non renseigné")] + list(StatutReine.choices), required=False,
+        widget=forms.RadioSelect(attrs={"class": "groupe-choix"}),
+    )
+    date_fecondation = forms.DateField(
+        label="Date de fécondation", required=False,
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+    marquage_effectue = forms.TypedChoiceField(
+        label="Marquage effectué",
+        choices=CHOIX_OUI_NON, coerce=lambda valeur: valeur == "oui",
+        initial="non",
+        widget=forms.RadioSelect(attrs={"class": "groupe-choix"}),
+    )
+    date_marquage = forms.DateField(
+        label="Date de marquage", required=False,
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["reine_existante"].queryset = (
+            Reine.objects.exclude(colonie_dirigee__active=True).distinct()
+        )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        origine = cleaned_data.get("origine")
+        if origine == "EXISTANTE":
+            if not cleaned_data.get("reine_existante"):
+                self.add_error(
+                    "reine_existante", "Choisissez une reine déjà enregistrée.",
+                )
+        elif origine == "NOUVELLE":
+            identifiant = cleaned_data.get("identifiant")
+            if not identifiant:
+                self.add_error(
+                    "identifiant",
+                    "L'identifiant est obligatoire pour une nouvelle reine.",
+                )
+            elif Reine.objects.filter(identifiant=identifiant).exists():
+                self.add_error("identifiant", "Cet identifiant est déjà utilisé.")
+            if (
+                cleaned_data.get("mode_acquisition") in MODES_ACQUISITION_ACHAT
+                and not cleaned_data.get("vendeur")
+                and not cleaned_data.get("nouveau_vendeur_nom")
+            ):
+                self.add_error(
+                    "vendeur", "Choisissez un vendeur ou renseignez-en un nouveau.",
+                )
+        if cleaned_data.get("marquage_effectue") and not cleaned_data.get("date_marquage"):
+            cleaned_data["date_marquage"] = cleaned_data.get("date_remplacement")
+        return cleaned_data
+
+
+class MarquerReineForm(forms.Form):
+    """Page de confirmation du marquage d'une reine (issue #51) : date
+    proposée par défaut aujourd'hui, modifiable."""
+
+    date_marquage = forms.DateField(
+        label="Date de marquage",
+        initial=timezone.localdate,
+        widget=forms.DateInput(attrs={"type": "date"}),
     )

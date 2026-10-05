@@ -28,12 +28,16 @@ from .diagnostics import (
     reines_genealogie_chronologie_incoherente,
 )
 from .gestion_base_test import NOM_RUCHER_TEST
+from gestion.models import Vendeur
+
 from .models import (
     CampagneElevage,
     CelluleRoyale,
     Colonie,
+    CouleurMarquage,
     CritereSelection,
     EtapeCalendrier,
+    EvenementColonie,
     LotCriteres,
     Mesure,
     ModeAcquisitionReine,
@@ -45,6 +49,7 @@ from .models import (
     StatutCelluleRoyale,
     StatutReine,
     TypeEtapeCalendrier,
+    TypeEvenementColonie,
     TypeRuche,
     VueColonieActive,
 )
@@ -1759,6 +1764,122 @@ class NouveauxModesAcquisitionReineTests(TestCase):
             reine.get_mode_acquisition_display(),
             "Remérage naturel (par la colonie elle-même)",
         )
+
+    def test_donnee_est_un_choix_valide(self):
+        reine = Reine.objects.create(
+            identifiant="R-Donnee-01", mode_acquisition=ModeAcquisitionReine.DONNEE,
+        )
+
+        reine.full_clean()
+        self.assertEqual(reine.get_mode_acquisition_display(), "Donnée")
+
+
+class VendeurReineTests(TestCase):
+    """Vendeur d'une reine achetée (issue #51) : défini dans `gestion`,
+    référencé depuis `Reine` (dans `selection`) par une clé étrangère —
+    jamais l'inverse, pour garder la règle de dépendance à sens unique
+    (CONTEXTE.md)."""
+
+    def test_vendeur_rattache_a_une_reine(self):
+        vendeur = Vendeur.objects.create(
+            nom="Rucher des Trois Chênes", telephone="0470 11 22 33",
+            adresse="Rue des Abeilles 1, Anhée",
+        )
+        reine = Reine.objects.create(
+            identifiant="R-Vendeur-01",
+            mode_acquisition=ModeAcquisitionReine.ACHETEE_FECONDEE,
+            vendeur=vendeur,
+        )
+
+        self.assertEqual(reine.vendeur.nom, "Rucher des Trois Chênes")
+        self.assertEqual(vendeur.reines.get(), reine)
+
+    def test_vendeur_facultatif(self):
+        reine = Reine.objects.create(identifiant="R-Vendeur-02")
+
+        reine.full_clean()
+        self.assertIsNone(reine.vendeur)
+
+    def test_suppression_vendeur_detache_la_reine_sans_la_supprimer(self):
+        vendeur = Vendeur.objects.create(nom="Vendeur temporaire")
+        reine = Reine.objects.create(identifiant="R-Vendeur-03", vendeur=vendeur)
+
+        vendeur.delete()
+
+        reine.refresh_from_db()
+        self.assertIsNone(reine.vendeur_id)
+
+
+class MarquageEffectueTests(TestCase):
+    """Champ « marquage effectué » (issue #51) : additif, valeur par
+    défaut « non » (`False`), sans incidence sur la couleur de
+    marquage (toujours déterminée par l'année de naissance, saisie à
+    part) ni sur les autres champs d'une reine existante."""
+
+    def test_valeur_par_defaut_non_marquee(self):
+        reine = Reine.objects.create(identifiant="R-Marquage-01")
+
+        self.assertFalse(reine.marquage_effectue)
+        self.assertIsNone(reine.date_marquage)
+
+    def test_reine_existante_non_affectee_par_lajout_du_champ(self):
+        reine = Reine.objects.create(
+            identifiant="R-Marquage-02", couleur_marquage=CouleurMarquage.VERT,
+            statut=StatutReine.FECONDEE,
+        )
+
+        self.assertEqual(reine.couleur_marquage, CouleurMarquage.VERT)
+        self.assertEqual(reine.statut, StatutReine.FECONDEE)
+        self.assertFalse(reine.marquage_effectue)
+
+    def test_marquage_effectue_avec_date(self):
+        reine = Reine.objects.create(
+            identifiant="R-Marquage-03", marquage_effectue=True,
+            date_marquage=date(2026, 4, 15),
+        )
+
+        reine.full_clean()
+        self.assertTrue(reine.marquage_effectue)
+        self.assertEqual(reine.date_marquage, date(2026, 4, 15))
+
+
+class EvenementColonieAncienneReineTests(TestCase):
+    """`EvenementColonie.ancienne_reine` (issue #51) : champ additif,
+    conserve la trace de la reine remplacée lors d'un remérage sans la
+    supprimer ni la modifier."""
+
+    def setUp(self):
+        self.rucher = Rucher.objects.create(nom="Rucher événement remérage")
+        self.type_ruche = TypeRuche.objects.get(code="DADANT10")
+        self.ruche = Ruche.objects.create(
+            type_ruche=self.type_ruche, numero=300, rucher=self.rucher,
+        )
+        self.ancienne_reine = Reine.objects.create(identifiant="R-Evt-Ancienne")
+        self.nouvelle_reine = Reine.objects.create(identifiant="R-Evt-Nouvelle")
+        self.colonie = Colonie.objects.create(
+            ruche=self.ruche, reine_actuelle=self.nouvelle_reine,
+            mode_creation=ModeCreationColonie.ACHAT, active=True,
+        )
+
+    def test_ancienne_reine_conservee_sur_levenement(self):
+        evenement = EvenementColonie.objects.create(
+            colonie=self.colonie, date="2026-06-01",
+            type_evenement=TypeEvenementColonie.REMERAGE,
+            reine=self.nouvelle_reine, ancienne_reine=self.ancienne_reine,
+        )
+
+        self.assertEqual(evenement.ancienne_reine_id, self.ancienne_reine.id)
+        self.assertEqual(evenement.reine_id, self.nouvelle_reine.id)
+
+    def test_evenement_sans_ancienne_reine_toujours_valide(self):
+        evenement = EvenementColonie.objects.create(
+            colonie=self.colonie, date="2026-06-02",
+            type_evenement=TypeEvenementColonie.REMERAGE,
+            reine=self.nouvelle_reine,
+        )
+
+        evenement.full_clean()
+        self.assertIsNone(evenement.ancienne_reine)
 
 
 class DiagnosticsTests(TestCase):

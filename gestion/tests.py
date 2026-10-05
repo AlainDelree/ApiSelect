@@ -11,10 +11,12 @@ from selection.models import (
     ConfigurationColonie,
     CouleurMarquage,
     EvenementColonie,
+    ModeAcquisitionReine,
     ModeCreationColonie,
     Reine,
     Ruche,
     Rucher,
+    StatutReine,
     TypeEvenementColonie,
     TypeRuche,
 )
@@ -30,6 +32,7 @@ from .models import (
     StatutObservation,
     TypeActionVisite,
     TypeObservationVisite,
+    Vendeur,
     Visite,
 )
 
@@ -1437,3 +1440,288 @@ class SignalReineMorteTests(TestCase):
         self.assertEqual(accueil.status_code, 200)
         self.assertEqual(fiche.status_code, 200)
         self.assertNotContains(fiche, "Reine morte confirmée le")
+
+
+class NouvelleReineFormulaireTests(TestCase):
+    """Remplacement de reine depuis la fiche colonie (issue #51) : la
+    reine actuelle est mise à jour, un événement de remérage est créé,
+    l'ancienne reine est conservée telle quelle et le signal « reine
+    morte » disparaît."""
+
+    def setUp(self):
+        self.rucher = Rucher.objects.create(nom="Rucher remplacement")
+        self.type_ruche = TypeRuche.objects.get(code="DADANT10")
+        self.ruche = Ruche.objects.create(
+            type_ruche=self.type_ruche, numero=200, rucher=self.rucher,
+        )
+        self.ancienne_reine = Reine.objects.create(identifiant="R-REMPLACE-1")
+        self.colonie = Colonie.objects.create(
+            ruche=self.ruche, reine_actuelle=self.ancienne_reine,
+            mode_creation=ModeCreationColonie.ACHAT, active=True,
+        )
+
+    def test_nouvelle_reine_achetee_avec_nouveau_vendeur(self):
+        reponse = self.client.post(
+            reverse("gestion:nouvelle_reine", args=[self.colonie.id]),
+            {
+                "date_remplacement": "2026-06-01",
+                "origine": "NOUVELLE",
+                "identifiant": "R-NOUVELLE-1",
+                "mode_acquisition": ModeAcquisitionReine.ACHETEE_FECONDEE,
+                "nouveau_vendeur_nom": "Rucher du Bois",
+                "nouveau_vendeur_telephone": "0470 00 00 00",
+                "statut": StatutReine.FECONDEE,
+                "marquage_effectue": "non",
+            },
+        )
+
+        self.assertRedirects(
+            reponse, reverse("gestion:fiche_colonie", args=[self.colonie.id]),
+        )
+        self.colonie.refresh_from_db()
+        nouvelle_reine = self.colonie.reine_actuelle
+        self.assertEqual(nouvelle_reine.identifiant, "R-NOUVELLE-1")
+        self.assertEqual(
+            nouvelle_reine.mode_acquisition, ModeAcquisitionReine.ACHETEE_FECONDEE,
+        )
+        self.assertIsNotNone(nouvelle_reine.vendeur)
+        self.assertEqual(nouvelle_reine.vendeur.nom, "Rucher du Bois")
+        self.assertEqual(nouvelle_reine.vendeur.telephone, "0470 00 00 00")
+        self.assertEqual(Vendeur.objects.count(), 1)
+
+        evenement = EvenementColonie.objects.get(
+            colonie=self.colonie, type_evenement=TypeEvenementColonie.REMERAGE,
+        )
+        self.assertEqual(str(evenement.date), "2026-06-01")
+        self.assertEqual(evenement.reine_id, nouvelle_reine.id)
+        self.assertEqual(evenement.ancienne_reine_id, self.ancienne_reine.id)
+
+        self.ancienne_reine.refresh_from_db()
+        self.assertEqual(self.ancienne_reine.identifiant, "R-REMPLACE-1")
+
+    def test_vendeur_deja_enregistre_reutilise_sans_doublon(self):
+        vendeur = Vendeur.objects.create(nom="Vendeur existant")
+
+        self.client.post(
+            reverse("gestion:nouvelle_reine", args=[self.colonie.id]),
+            {
+                "date_remplacement": "2026-06-02",
+                "origine": "NOUVELLE",
+                "identifiant": "R-NOUVELLE-2",
+                "mode_acquisition": ModeAcquisitionReine.ACHETEE_CR,
+                "vendeur": vendeur.id,
+                "marquage_effectue": "non",
+            },
+        )
+
+        self.assertEqual(Vendeur.objects.count(), 1)
+        self.colonie.refresh_from_db()
+        self.assertEqual(self.colonie.reine_actuelle.vendeur_id, vendeur.id)
+
+    def test_reine_existante_non_affectee_devient_reine_actuelle(self):
+        reine_libre = Reine.objects.create(identifiant="R-LIBRE-1")
+
+        reponse = self.client.post(
+            reverse("gestion:nouvelle_reine", args=[self.colonie.id]),
+            {
+                "date_remplacement": "2026-06-03",
+                "origine": "EXISTANTE",
+                "reine_existante": reine_libre.id,
+                "marquage_effectue": "non",
+            },
+        )
+
+        self.assertRedirects(
+            reponse, reverse("gestion:fiche_colonie", args=[self.colonie.id]),
+        )
+        self.colonie.refresh_from_db()
+        self.assertEqual(self.colonie.reine_actuelle_id, reine_libre.id)
+        self.assertEqual(Reine.objects.count(), 2)
+
+    def test_reine_deja_affectee_a_une_colonie_active_non_proposee(self):
+        autre_ruche = Ruche.objects.create(
+            type_ruche=self.type_ruche, numero=201, rucher=self.rucher,
+        )
+        reine_active_ailleurs = Reine.objects.create(identifiant="R-AILLEURS-1")
+        Colonie.objects.create(
+            ruche=autre_ruche, reine_actuelle=reine_active_ailleurs,
+            mode_creation=ModeCreationColonie.ACHAT, active=True,
+        )
+        reine_libre = Reine.objects.create(identifiant="R-LIBRE-PROPOSEE")
+
+        reponse = self.client.get(
+            reverse("gestion:nouvelle_reine", args=[self.colonie.id]),
+        )
+
+        queryset_proposee = reponse.context["form"].fields["reine_existante"].queryset
+        self.assertNotIn(reine_active_ailleurs, queryset_proposee)
+        self.assertIn(reine_libre, queryset_proposee)
+
+    def test_mode_acquisition_sans_achat_naccepte_pas_de_vendeur_requis(self):
+        reponse = self.client.post(
+            reverse("gestion:nouvelle_reine", args=[self.colonie.id]),
+            {
+                "date_remplacement": "2026-06-04",
+                "origine": "NOUVELLE",
+                "identifiant": "R-NOUVELLE-3",
+                "mode_acquisition": ModeAcquisitionReine.ELEVEE,
+                "marquage_effectue": "non",
+            },
+        )
+
+        self.assertRedirects(
+            reponse, reverse("gestion:fiche_colonie", args=[self.colonie.id]),
+        )
+        self.colonie.refresh_from_db()
+        self.assertEqual(self.colonie.reine_actuelle.identifiant, "R-NOUVELLE-3")
+        self.assertIsNone(self.colonie.reine_actuelle.vendeur)
+
+    def test_achat_sans_vendeur_refuse(self):
+        reponse = self.client.post(
+            reverse("gestion:nouvelle_reine", args=[self.colonie.id]),
+            {
+                "date_remplacement": "2026-06-05",
+                "origine": "NOUVELLE",
+                "identifiant": "R-NOUVELLE-4",
+                "mode_acquisition": ModeAcquisitionReine.ACHETEE_VIERGE,
+                "marquage_effectue": "non",
+            },
+        )
+
+        self.assertEqual(reponse.status_code, 200)
+        self.colonie.refresh_from_db()
+        self.assertEqual(self.colonie.reine_actuelle_id, self.ancienne_reine.id)
+
+    def test_remplacement_fait_disparaitre_le_signal_reine_morte(self):
+        visite = Visite.objects.create(colonie=self.colonie, date="2026-05-01")
+        observation = ObservationVisite.objects.create(
+            visite=visite, colonie=self.colonie,
+            type_observation=TypeObservationVisite.REINE_MORTE,
+            certitude=CertitudeObservation.DOUTE,
+        )
+        observation.confirmer()
+        fiche_avant = self.client.get(
+            reverse("gestion:fiche_colonie", args=[self.colonie.id])
+        )
+        self.assertContains(fiche_avant, "Reine morte confirmée le")
+
+        self.client.post(
+            reverse("gestion:nouvelle_reine", args=[self.colonie.id]),
+            {
+                "date_remplacement": "2026-05-10",
+                "origine": "NOUVELLE",
+                "identifiant": "R-NOUVELLE-5",
+                "mode_acquisition": ModeAcquisitionReine.ELEVEE,
+                "marquage_effectue": "non",
+            },
+        )
+
+        fiche_apres = self.client.get(
+            reverse("gestion:fiche_colonie", args=[self.colonie.id])
+        )
+        self.assertNotContains(fiche_apres, "Reine morte confirmée le")
+
+    def test_vendeur_affiche_dans_le_bloc_reine_de_la_fiche_colonie(self):
+        vendeur = Vendeur.objects.create(nom="Apiculture du Nord")
+        self.ancienne_reine.vendeur = vendeur
+        self.ancienne_reine.save(update_fields=["vendeur"])
+
+        fiche = self.client.get(
+            reverse("gestion:fiche_colonie", args=[self.colonie.id])
+        )
+
+        self.assertContains(fiche, "Apiculture du Nord")
+
+
+class MarquageReineTests(TestCase):
+    """Marquage effectué sur une reine (issue #51) : pastille pleine ou
+    vide selon le marquage, bouton « Marquer la reine », compteur et
+    page « Reines à marquer »."""
+
+    def setUp(self):
+        self.rucher = Rucher.objects.create(nom="Rucher marquage")
+        self.type_ruche = TypeRuche.objects.get(code="DADANT10")
+        self.ruche = Ruche.objects.create(
+            type_ruche=self.type_ruche, numero=210, rucher=self.rucher,
+        )
+
+    def test_pastille_vide_pour_reine_non_marquee(self):
+        reine = Reine.objects.create(
+            identifiant="R-NON-MARQUEE", couleur_marquage=CouleurMarquage.ROUGE,
+        )
+        Colonie.objects.create(
+            ruche=self.ruche, reine_actuelle=reine,
+            mode_creation=ModeCreationColonie.ACHAT, active=True,
+        )
+
+        accueil = self.client.get(reverse("gestion:accueil"))
+
+        self.assertContains(accueil, "pastille-marquage-vide")
+        self.assertContains(accueil, "Non marquée")
+
+    def test_pastille_pleine_pour_reine_marquee(self):
+        reine = Reine.objects.create(
+            identifiant="R-MARQUEE", couleur_marquage=CouleurMarquage.ROUGE,
+            marquage_effectue=True, date_marquage="2026-04-01",
+        )
+        Colonie.objects.create(
+            ruche=self.ruche, reine_actuelle=reine,
+            mode_creation=ModeCreationColonie.ACHAT, active=True,
+        )
+
+        accueil = self.client.get(reverse("gestion:accueil"))
+
+        self.assertNotContains(accueil, "pastille-marquage-vide")
+        self.assertContains(accueil, "Marquée")
+
+    def test_bouton_marquer_la_reine_enregistre_marquage_et_date(self):
+        reine = Reine.objects.create(identifiant="R-A-MARQUER-1")
+        colonie = Colonie.objects.create(
+            ruche=self.ruche, reine_actuelle=reine,
+            mode_creation=ModeCreationColonie.ACHAT, active=True,
+        )
+
+        reponse = self.client.post(
+            reverse("gestion:marquer_reine", args=[reine.id]),
+            {"date_marquage": "2026-07-14", "retour": f"colonie:{colonie.id}"},
+        )
+
+        self.assertRedirects(
+            reponse, reverse("gestion:fiche_colonie", args=[colonie.id]),
+        )
+        reine.refresh_from_db()
+        self.assertTrue(reine.marquage_effectue)
+        self.assertEqual(str(reine.date_marquage), "2026-07-14")
+
+    def test_compteur_et_page_reines_a_marquer_ne_listent_que_les_actives_non_marquees(self):
+        reine_active_non_marquee = Reine.objects.create(identifiant="R-COMPTE-1")
+        Colonie.objects.create(
+            ruche=self.ruche, reine_actuelle=reine_active_non_marquee,
+            mode_creation=ModeCreationColonie.ACHAT, active=True,
+        )
+        autre_ruche = Ruche.objects.create(
+            type_ruche=self.type_ruche, numero=211, rucher=self.rucher,
+        )
+        reine_marquee = Reine.objects.create(
+            identifiant="R-COMPTE-2", marquage_effectue=True,
+        )
+        Colonie.objects.create(
+            ruche=autre_ruche, reine_actuelle=reine_marquee,
+            mode_creation=ModeCreationColonie.ACHAT, active=True,
+        )
+        ruche_inactive = Ruche.objects.create(
+            type_ruche=self.type_ruche, numero=212, rucher=self.rucher,
+        )
+        reine_colonie_inactive = Reine.objects.create(identifiant="R-COMPTE-3")
+        Colonie.objects.create(
+            ruche=ruche_inactive, reine_actuelle=reine_colonie_inactive,
+            mode_creation=ModeCreationColonie.ACHAT, active=False,
+        )
+
+        accueil = self.client.get(reverse("gestion:accueil"))
+        self.assertContains(accueil, "1 reine non marquée")
+
+        page = self.client.get(reverse("gestion:reines_a_marquer"))
+        self.assertContains(page, "R-COMPTE-1")
+        self.assertNotContains(page, "R-COMPTE-2")
+        self.assertNotContains(page, "R-COMPTE-3")
