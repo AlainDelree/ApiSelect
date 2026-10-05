@@ -23,6 +23,7 @@ from selection.models import (
 
 from .affichage import COULEUR_GRISE_PAR_DEFAUT, bande_ruche
 from .couleurs import couleur_marquage_pour_annee
+from .forms import NouvelleReineForm, ReineForm
 from .models import (
     DELAI_RAPPEL_REINE_MORTE_JOURS,
     ActionVisite,
@@ -2000,3 +2001,148 @@ class NouvelleReineCouleurMarquageTests(TestCase):
         )
         reine_libre.refresh_from_db()
         self.assertEqual(reine_libre.couleur_marquage, CouleurMarquage.BLEU)
+
+
+class ModifierReineTests(TestCase):
+    """Formulaire unique de création/modification d'une reine (issue
+    #54), depuis la fiche colonie et depuis la page « Reines »."""
+
+    def setUp(self):
+        self.rucher = Rucher.objects.create(nom="Rucher formulaire reine")
+        self.type_ruche = TypeRuche.objects.get(code="DADANT10")
+        self.ruche = Ruche.objects.create(
+            type_ruche=self.type_ruche, numero=300, rucher=self.rucher,
+        )
+        self.mere = Reine.objects.create(identifiant="R-MERE-54")
+        self.reine = Reine.objects.create(identifiant="R-MODIF-54")
+        self.colonie = Colonie.objects.create(
+            ruche=self.ruche, reine_actuelle=self.reine,
+            mode_creation=ModeCreationColonie.ACHAT, active=True,
+        )
+
+    def test_modification_depuis_la_fiche_colonie_couleur_naissance_mere(self):
+        reponse = self.client.post(
+            reverse("gestion:modifier_reine", args=[self.reine.id])
+            + f"?retour=colonie:{self.colonie.id}",
+            {
+                "retour": f"colonie:{self.colonie.id}",
+                "identifiant": "R-MODIF-54",
+                "mere": self.mere.id,
+                "date_naissance": "2024-05-01",
+                "marquage_effectue": "oui",
+                "date_marquage": "2024-06-01",
+                "couleur_marquage": CouleurMarquage.VERT,
+            },
+        )
+
+        self.assertRedirects(
+            reponse, reverse("gestion:fiche_colonie", args=[self.colonie.id]),
+        )
+        self.reine.refresh_from_db()
+        self.assertEqual(self.reine.mere_id, self.mere.id)
+        self.assertEqual(str(self.reine.date_naissance), "2024-05-01")
+        self.assertEqual(self.reine.couleur_marquage, CouleurMarquage.VERT)
+
+    def test_formulaire_preremplit_les_champs_existants(self):
+        self.reine.mere = self.mere
+        self.reine.date_naissance = date(2023, 4, 1)
+        self.reine.save(update_fields=["mere", "date_naissance"])
+
+        reponse = self.client.get(
+            reverse("gestion:modifier_reine", args=[self.reine.id]),
+        )
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertEqual(reponse.context["form"].initial["mere"], self.mere.id)
+        self.assertEqual(reponse.context["form"].initial["date_naissance"], date(2023, 4, 1))
+
+    def test_doublon_identifiant_refuse_avec_message_clair(self):
+        autre = Reine.objects.create(identifiant="R-DEJA-UTILISE")
+
+        reponse = self.client.post(
+            reverse("gestion:modifier_reine", args=[self.reine.id]),
+            {
+                "identifiant": autre.identifiant,
+                "marquage_effectue": "non",
+            },
+        )
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertContains(reponse, "Cet identifiant est déjà utilisé par une autre reine.")
+        self.reine.refresh_from_db()
+        self.assertEqual(self.reine.identifiant, "R-MODIF-54")
+
+    def test_couleur_obligatoire_si_marquage_effectue(self):
+        reponse = self.client.post(
+            reverse("gestion:modifier_reine", args=[self.reine.id]),
+            {
+                "identifiant": "R-MODIF-54",
+                "marquage_effectue": "oui",
+                "date_marquage": "2024-06-01",
+            },
+        )
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertContains(
+            reponse,
+            "La couleur du marquage est obligatoire si le marquage est effectué.",
+        )
+        self.reine.refresh_from_db()
+        self.assertFalse(self.reine.marquage_effectue)
+
+    def test_couleur_deja_enregistree_jamais_effacee_silencieusement(self):
+        self.reine.marquage_effectue = True
+        self.reine.couleur_marquage = CouleurMarquage.BLEU
+        self.reine.date_marquage = date(2022, 1, 1)
+        self.reine.save(update_fields=["marquage_effectue", "couleur_marquage", "date_marquage"])
+
+        reponse = self.client.post(
+            reverse("gestion:modifier_reine", args=[self.reine.id]),
+            {
+                "identifiant": "R-MODIF-54",
+                "marquage_effectue": "non",
+            },
+        )
+
+        self.assertEqual(reponse.status_code, 302)
+        self.reine.refresh_from_db()
+        self.assertEqual(self.reine.couleur_marquage, CouleurMarquage.BLEU)
+
+    def test_ajout_reine_sans_colonie_depuis_la_page_reines(self):
+        reponse = self.client.post(
+            reverse("gestion:ajouter_reine"),
+            {
+                "identifiant": "R-SANS-COLONIE-54",
+                "marquage_effectue": "non",
+            },
+        )
+
+        self.assertRedirects(reponse, reverse("gestion:liste_reines"))
+        reine_creee = Reine.objects.get(identifiant="R-SANS-COLONIE-54")
+        self.assertEqual(reine_creee.colonie_dirigee.count(), 0)
+
+    def test_page_reines_liste_aussi_les_reines_sans_colonie(self):
+        Reine.objects.create(identifiant="R-ORPHELINE-54")
+
+        page = self.client.get(reverse("gestion:liste_reines"))
+
+        self.assertContains(page, "R-ORPHELINE-54")
+        self.assertContains(page, "sans colonie")
+        self.assertContains(page, "R-MODIF-54")
+
+    def test_champs_reine_identiques_entre_creation_modification_et_nouvelle_reine(self):
+        champs_remplacement = {"date_remplacement", "origine", "reine_existante"}
+
+        champs_creation = set(ReineForm().fields)
+        champs_modification = set(ReineForm(instance=self.reine).fields)
+        champs_remplacement_total = set(NouvelleReineForm().fields)
+
+        self.assertEqual(champs_creation, champs_modification)
+        self.assertEqual(
+            champs_creation, champs_remplacement_total - champs_remplacement,
+        )
+
+    def test_lien_vers_la_page_reines_depuis_laccueil(self):
+        page = self.client.get(reverse("gestion:accueil"))
+
+        self.assertContains(page, reverse("gestion:liste_reines"))

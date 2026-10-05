@@ -16,6 +16,18 @@ urlpatterns = [
         views.nouvelle_reine, name="nouvelle_reine",
     ),
     path(
+        "reines/",
+        views.liste_reines, name="liste_reines",
+    ),
+    path(
+        "reines/ajouter/",
+        views.ajouter_reine, name="ajouter_reine",
+    ),
+    path(
+        "reines/<int:reine_id>/modifier/",
+        views.modifier_reine, name="modifier_reine",
+    ),
+    path(
         "reines-a-marquer/",
         views.reines_a_marquer, name="reines_a_marquer",
     ),

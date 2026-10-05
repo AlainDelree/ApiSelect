@@ -72,13 +72,16 @@
             <dt>Statut</dt><dd>{{ colonie.reine_actuelle.get_statut_display|default:"non renseigné" }}</dd>
             <dt>Date de fécondation</dt><dd>{{ colonie.reine_actuelle.date_fecondation|default:"non renseignée" }}</dd>
         </dl>
-        {% if not colonie.reine_actuelle.marquage_effectue %}
         <p>
+            <a class="bouton-marquer-reine" href="{% url 'gestion:modifier_reine' colonie.reine_actuelle.id %}?retour=colonie:{{ colonie.id }}">
+                Modifier la reine
+            </a>
+            {% if not colonie.reine_actuelle.marquage_effectue %}
             <a class="bouton-marquer-reine" href="{% url 'gestion:marquer_reine' colonie.reine_actuelle.id %}?retour=colonie:{{ colonie.id }}">
                 Marquer la reine
             </a>
+            {% endif %}
         </p>
-        {% endif %}
         {% else %}
         <p class="message-vide">Aucune reine renseignée pour cette colonie.</p>
         {% endif %}

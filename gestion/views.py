@@ -429,6 +429,70 @@ def nouvelle_reine(request, colonie_id):
     })
 
 
+def _traiter_formulaire_reine(request, reine, retour):
+    """Création ou modification d'une reine par le formulaire unique
+    (issue #54) : même gabarit, même classe de formulaire (`ReineForm`)
+    pour la création (page « Reines »), la modification (fiche colonie
+    et page « Reines ») et, par héritage, le remplacement
+    (`NouvelleReineForm`, traité séparément dans `nouvelle_reine` à
+    cause des champs propres au remplacement). `retour` indique où
+    revenir après l'enregistrement, comme pour `marquer_reine`."""
+    if request.method == "POST":
+        form = ReineForm(request.POST, instance=reine)
+        if form.is_valid():
+            form.save()
+            if retour.startswith("colonie:"):
+                return redirect("gestion:fiche_colonie", colonie_id=retour[len("colonie:"):])
+            return redirect("gestion:liste_reines")
+    else:
+        form = ReineForm(instance=reine)
+
+    return render(request, "gestion/reine_form.html", {
+        "reine": reine,
+        "form": form,
+        "retour": retour,
+    })
+
+
+def modifier_reine(request, reine_id):
+    """Bouton « Modifier la reine » de la fiche colonie et de la page
+    « Reines » (issue #54) : même formulaire que la création,
+    pré-rempli."""
+    reine = get_object_or_404(Reine, pk=reine_id)
+    retour = request.GET.get("retour") or request.POST.get("retour") or ""
+    return _traiter_formulaire_reine(request, reine, retour)
+
+
+def ajouter_reine(request):
+    """Bouton « Ajouter une reine » de la page « Reines » (issue #54) :
+    même formulaire vide, pour enregistrer une reine qui n'est pas
+    encore installée dans une colonie (ex. une reine achetée qui vient
+    d'arriver)."""
+    return _traiter_formulaire_reine(request, Reine(), "")
+
+
+def liste_reines(request):
+    """Page « Reines » (issue #54) : toutes les reines enregistrées, y
+    compris celles qui ne sont pas affectées à une colonie active —
+    contrairement à la fiche colonie et à « Reines à marquer », qui ne
+    montrent que les colonies actives."""
+    colonies_par_reine = Colonie.objects.select_related(
+        "ruche__type_ruche", "ruche__rucher",
+    ).order_by("-active", "-id")
+    reines = (
+        Reine.objects.select_related("vendeur")
+        .prefetch_related(
+            Prefetch("colonie_dirigee", queryset=colonies_par_reine),
+        )
+        .order_by("identifiant")
+    )
+    lignes = [
+        {"reine": reine, "colonie": next(iter(reine.colonie_dirigee.all()), None)}
+        for reine in reines
+    ]
+    return render(request, "gestion/liste_reines.html", {"lignes": lignes})
+
+
 def suggestion_identifiant_reine(request):
     """Petit point d'entrée JSON utilisé en amélioration progressive
     par le formulaire de remplacement de reine (issue #51) : réutilise
