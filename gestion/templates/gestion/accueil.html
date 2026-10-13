@@ -28,9 +28,23 @@
         {% endif %}
         <p class="compteurs">
             <a href="{% url 'gestion:liste_reines' %}">Reines &rarr;</a>
+            ·
+            <a href="{% url 'gestion:stocks' %}">Stocks &rarr;</a>
         </p>
         <p class="lien-admin"><a href="{% url 'admin:index' %}">Administration &rarr;</a></p>
     </header>
+
+    {% if articles_stock_bas %}
+    <section class="bloc-stock-bas">
+        <h2>Stock bas</h2>
+        <ul class="liste-stock-bas">
+            {% for article in articles_stock_bas %}
+            <li>{{ article.nom }} — {{ article.stock }} {{ article.unite }}</li>
+            {% endfor %}
+        </ul>
+        <p><a href="{% url 'gestion:stocks' %}?stock_bas=1">Voir les stocks &rarr;</a></p>
+    </section>
+    {% endif %}
 
     {% if rappels_a_revisiter %}
     <section class="bloc-a-revisiter">

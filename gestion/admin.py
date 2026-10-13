@@ -11,7 +11,16 @@ restent possibles, à titre exceptionnel."""
 
 from django.contrib import admin
 
-from .models import ActionVisite, ObservationVisite, RappelRevisite, Vendeur, Visite
+from .models import (
+    ActionVisite,
+    Article,
+    FamilleMateriel,
+    MouvementStock,
+    ObservationVisite,
+    RappelRevisite,
+    Vendeur,
+    Visite,
+)
 
 
 @admin.register(Vendeur)
@@ -78,6 +87,45 @@ class RappelRevisiteAdmin(admin.ModelAdmin):
     list_editable = ["traite"]
     autocomplete_fields = ["observation"]
     ordering = ["date_revisite"]
+
+    def has_add_permission(self, request):
+        return False
+
+
+@admin.register(FamilleMateriel)
+class FamilleMaterielAdmin(admin.ModelAdmin):
+    """Petit référentiel modifiable (issue #55) : contrairement aux
+    articles et aux mouvements, l'ajout y reste permis."""
+
+    list_display = ["nom"]
+    search_fields = ["nom"]
+
+
+@admin.register(Article)
+class ArticleAdmin(admin.ModelAdmin):
+    """La saisie d'un article se fait par le formulaire de la page
+    « Stocks » (issue #55) ; cet écran reste disponible pour la
+    consultation et les corrections exceptionnelles, sans ajout."""
+
+    list_display = ["nom", "rubrique", "nature", "unite", "seuil_alerte", "actif"]
+    list_filter = ["rubrique", "nature", "actif"]
+    search_fields = ["nom"]
+    filter_horizontal = ["familles_compatibles"]
+
+    def has_add_permission(self, request):
+        return False
+
+
+@admin.register(MouvementStock)
+class MouvementStockAdmin(admin.ModelAdmin):
+    """La saisie d'un mouvement se fait par le panneau « − » / « + »
+    de la page « Stocks » (issue #55) ; cet écran reste disponible pour
+    la consultation et les corrections exceptionnelles, sans ajout."""
+
+    list_display = ["article", "date", "quantite", "motif"]
+    list_filter = ["motif", "date"]
+    search_fields = ["article__nom", "note"]
+    autocomplete_fields = ["article"]
 
     def has_add_permission(self, request):
         return False

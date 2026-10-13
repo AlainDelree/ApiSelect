@@ -12,8 +12,10 @@ Django, aucun SQL propre à PostgreSQL (cf. CONTEXTE.md).
 """
 
 from datetime import timedelta
+from decimal import Decimal
 
 from django.db import models
+from django.db.models import Sum
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 
@@ -278,3 +280,123 @@ def date_revisite_par_defaut(date_visite):
     if isinstance(date_visite, str):
         date_visite = parse_date(date_visite)
     return date_visite + timedelta(days=DELAI_RAPPEL_REINE_MORTE_JOURS)
+
+
+# --- Stocks : matériel et consommables (issue #55) ---
+#
+# Étape 1 du suivi des stocks (matériel et consommables). Le modèle
+# prévoit sans les exploiter encore un numéro de lot et une date de
+# péremption sur le mouvement, pour l'étape 2 (produits de
+# traitement). Le stock d'un article n'est jamais stocké : toujours
+# recalculé comme la somme de ses mouvements (cf. `Article.stock`),
+# pour qu'aucune correction manuelle du total ne puisse diverger de
+# son historique.
+
+
+class FamilleMateriel(models.Model):
+    """Petit référentiel modifiable (ex. Ruche 10 cadres, Ruchette 6
+    cadres, Miniplus, Apidea), pour filtrer les articles compatibles
+    avec un type de boîte donné."""
+
+    nom = models.CharField(max_length=100, unique=True)
+
+    class Meta:
+        verbose_name = "Famille de matériel"
+        verbose_name_plural = "Familles de matériel"
+        ordering = ["nom"]
+
+    def __str__(self):
+        return self.nom
+
+
+class RubriqueArticle(models.TextChoices):
+    RUCHE = "RUCHE", "Ruche et ruchette"
+    ELEVAGE = "ELEVAGE", "Élevage"
+    VISITE = "VISITE", "Visite"
+    ATELIER = "ATELIER", "Atelier"
+    RECOLTE = "RECOLTE", "Récolte"
+    AUTRE = "AUTRE", "Autre"
+
+
+class NatureArticle(models.TextChoices):
+    DURABLE = "DURABLE", "Matériel durable"
+    CONSOMMABLE = "CONSOMMABLE", "Consommable"
+
+
+class MotifMouvement(models.TextChoices):
+    STOCK_INITIAL = "STOCK_INITIAL", "Stock initial"
+    ACHAT = "ACHAT", "Achat"
+    UTILISATION = "UTILISATION", "Utilisation"
+    PERTE = "PERTE", "Perte ou casse"
+    DON_VENTE = "DON_VENTE", "Don ou vente"
+    CORRECTION = "CORRECTION", "Correction d'inventaire"
+
+
+class Article(models.Model):
+    """Article de matériel ou de consommable suivi en stock. Reconnu,
+    pour le chargement du catalogue de départ, par son nom et sa
+    rubrique. Une pièce commune à plusieurs types de boîtes n'existe
+    qu'une fois, compatible avec chacune des familles concernées
+    (`familles_compatibles`) — une pièce sans famille compatible
+    n'est simplement pas filtrable par famille (ex. matériel de
+    visite)."""
+
+    nom = models.CharField(max_length=150)
+    rubrique = models.CharField(max_length=20, choices=RubriqueArticle.choices)
+    nature = models.CharField(max_length=20, choices=NatureArticle.choices)
+    unite = models.CharField(max_length=30, help_text="Pièce, bobine, feuille, flacon, kg, litre…")
+    seuil_alerte = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        help_text="Badge « Stock bas » si le stock descend sous ce seuil.",
+    )
+    actif = models.BooleanField(default=True)
+    notes = models.TextField(blank=True)
+    familles_compatibles = models.ManyToManyField(
+        FamilleMateriel, related_name="articles", blank=True,
+    )
+
+    class Meta:
+        verbose_name = "Article"
+        verbose_name_plural = "Articles"
+        ordering = ["rubrique", "nom"]
+        unique_together = [["nom", "rubrique"]]
+
+    def __str__(self):
+        return self.nom
+
+    @property
+    def stock(self):
+        total = self.mouvements.aggregate(total=Sum("quantite"))["total"]
+        return total if total is not None else Decimal("0")
+
+    @property
+    def stock_bas(self):
+        return self.seuil_alerte is not None and self.stock < self.seuil_alerte
+
+
+class MouvementStock(models.Model):
+    """Mouvement de stock d'un article : quantité signée (entrée
+    positive, sortie négative). Le stock affiché n'est jamais qu'une
+    somme de mouvements — on ne modifie jamais directement un total
+    (cf. `Article.stock`). `numero_lot` et `date_peremption` sont
+    prévus pour l'étape 2 (produits de traitement) sans être exploités
+    pour l'instant."""
+
+    article = models.ForeignKey(
+        Article, on_delete=models.PROTECT, related_name="mouvements",
+    )
+    date = models.DateField(default=timezone.localdate)
+    quantite = models.DecimalField(max_digits=10, decimal_places=2)
+    motif = models.CharField(max_length=20, choices=MotifMouvement.choices)
+    note = models.CharField(max_length=255, blank=True)
+    numero_lot = models.CharField(max_length=100, blank=True)
+    date_peremption = models.DateField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Mouvement de stock"
+        verbose_name_plural = "Mouvements de stock"
+        ordering = ["-date", "-id"]
+
+    def __str__(self):
+        signe = "+" if self.quantite >= 0 else ""
+        return f"{self.article} : {signe}{self.quantite} ({self.get_motif_display()})"

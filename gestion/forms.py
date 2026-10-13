@@ -9,6 +9,8 @@ un seul choix pour couvrir à la fois « cette observation a eu lieu »
 et sa certitude.
 """
 
+from decimal import Decimal
+
 from django import forms
 from django.utils import timezone
 
@@ -23,8 +25,10 @@ from selection.models import (
 from .couleurs import couleur_marquage_proposee
 
 from .models import (
+    Article,
     CertitudeObservation,
     Comportement,
+    MouvementStock,
     NiveauReserves,
     ObservationReine,
     ReponseCellulesRoyales,
@@ -377,3 +381,70 @@ class MarquerReineForm(forms.Form):
             couleur_proposee = couleur_marquage_proposee(reine)
             if couleur_proposee:
                 self.fields["couleur_marquage"].initial = couleur_proposee
+
+
+class ArticleForm(forms.ModelForm):
+    """Formulaire unique d'un article de stock (issue #55), pour la
+    création et la modification : mêmes champs partout. `actif` n'en
+    fait pas partie — un article se désactive par un bouton dédié
+    plutôt qu'en cochant une case ici (suppression impossible s'il a
+    des mouvements)."""
+
+    class Meta:
+        model = Article
+        fields = [
+            "nom", "rubrique", "nature", "unite", "seuil_alerte",
+            "familles_compatibles", "notes",
+        ]
+        labels = {
+            "nom": "Nom",
+            "rubrique": "Rubrique",
+            "nature": "Nature",
+            "unite": "Unité",
+            "seuil_alerte": "Seuil d'alerte (facultatif)",
+            "familles_compatibles": "Familles de matériel compatibles",
+            "notes": "Notes",
+        }
+        widgets = {
+            "rubrique": forms.RadioSelect(attrs={"class": "groupe-choix"}),
+            "nature": forms.RadioSelect(attrs={"class": "groupe-choix"}),
+            "familles_compatibles": forms.CheckboxSelectMultiple(attrs={"class": "groupe-choix"}),
+            "notes": forms.Textarea(attrs={"rows": 3}),
+        }
+
+
+class MouvementForm(forms.ModelForm):
+    """Panneau de saisie d'un mouvement de stock (issue #55), ouvert
+    depuis le bouton « − » ou « + » de la page « Stocks » : la
+    quantité saisie est toujours positive, son signe est déterminé par
+    le bouton utilisé (`sens`, appliqué dans la vue)."""
+
+    quantite = forms.DecimalField(
+        label="Quantité", max_digits=10, decimal_places=2,
+        min_value=Decimal("0.01"), initial=1,
+    )
+
+    class Meta:
+        model = MouvementStock
+        fields = ["date", "quantite", "motif", "note"]
+        labels = {"date": "Date", "motif": "Motif", "note": "Note (facultative)"}
+        widgets = {
+            "date": forms.DateInput(attrs={"type": "date"}),
+            "note": forms.TextInput(),
+        }
+
+
+class CorrectionStockForm(forms.Form):
+    """Bouton « Corriger le stock » (issue #55) : la quantité
+    réellement comptée est saisie, la différence avec le stock actuel
+    est enregistrée comme mouvement de correction d'inventaire."""
+
+    quantite_comptee = forms.DecimalField(
+        label="Quantité réellement comptée",
+        max_digits=10, decimal_places=2, min_value=Decimal("0"),
+    )
+    date = forms.DateField(
+        label="Date", initial=timezone.localdate,
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+    note = forms.CharField(label="Note (facultative)", max_length=255, required=False)

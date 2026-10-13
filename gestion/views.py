@@ -10,7 +10,7 @@ sélection génétique.
 """
 
 from django.db.models import Prefetch
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
@@ -24,8 +24,12 @@ from selection.models import (
     TypeEvenementColonie,
 )
 
+from .catalogue_stocks import charger_catalogue_depart as _charger_catalogue_depart
 from .forms import (
+    ArticleForm,
+    CorrectionStockForm,
     MarquerReineForm,
+    MouvementForm,
     NouvelleReineForm,
     ReineForm,
     RevisiteReineMorteForm,
@@ -34,8 +38,13 @@ from .forms import (
 )
 from .models import (
     ActionVisite,
+    Article,
+    FamilleMateriel,
+    MotifMouvement,
+    MouvementStock,
     ObservationVisite,
     RappelRevisite,
+    RubriqueArticle,
     StatutObservation,
     TypeObservationVisite,
     Vendeur,
@@ -163,6 +172,11 @@ def accueil(request):
         for rappel in rappels_qs
     ]
 
+    articles_stock_bas = [
+        article for article in Article.objects.filter(actif=True, seuil_alerte__isnull=False)
+        if article.stock_bas
+    ]
+
     return render(request, "gestion/accueil.html", {
         "sections": sections,
         "nb_colonies_actives": Colonie.objects.filter(active=True).count(),
@@ -171,6 +185,7 @@ def accueil(request):
             active=True, reine_actuelle__marquage_effectue=False,
         ).count(),
         "rappels_a_revisiter": rappels_a_revisiter,
+        "articles_stock_bas": articles_stock_bas,
     })
 
 
@@ -547,3 +562,188 @@ def reines_a_marquer(request):
         .order_by("ruche__rucher__nom", "ruche__numero")
     )
     return render(request, "gestion/reines_a_marquer.html", {"colonies": colonies})
+
+
+def stocks(request):
+    """Page « Stocks » (issue #55) : articles groupés par rubrique,
+    stock actuel (toujours recalculé depuis les mouvements),
+    filtrables par famille de matériel, par rubrique, « stock bas
+    seulement », et masquant par défaut les articles inactifs."""
+    afficher_inactifs = request.GET.get("inactifs") == "1"
+    stock_bas_seulement = request.GET.get("stock_bas") == "1"
+    famille_id = request.GET.get("famille") or ""
+    rubrique = request.GET.get("rubrique") or ""
+
+    articles = Article.objects.prefetch_related("familles_compatibles")
+    if not afficher_inactifs:
+        articles = articles.filter(actif=True)
+    if famille_id:
+        articles = articles.filter(familles_compatibles__id=famille_id)
+    if rubrique:
+        articles = articles.filter(rubrique=rubrique)
+    articles = articles.order_by("rubrique", "nom").distinct()
+
+    groupes_par_rubrique = {}
+    for article in articles:
+        if stock_bas_seulement and not article.stock_bas:
+            continue
+        groupes_par_rubrique.setdefault(article.rubrique, []).append(article)
+
+    groupes = [
+        {"rubrique": code, "libelle": libelle, "articles": groupes_par_rubrique[code]}
+        for code, libelle in RubriqueArticle.choices
+        if code in groupes_par_rubrique
+    ]
+
+    return render(request, "gestion/stocks.html", {
+        "groupes": groupes,
+        "familles": FamilleMateriel.objects.all(),
+        "rubriques": RubriqueArticle.choices,
+        "afficher_inactifs": afficher_inactifs,
+        "stock_bas_seulement": stock_bas_seulement,
+        "famille_id": famille_id,
+        "rubrique": rubrique,
+    })
+
+
+def _traiter_formulaire_article(request, article):
+    """Formulaire unique d'un article (issue #55), pour la création
+    (bouton « Ajouter un article ») et la modification — mêmes champs
+    partout."""
+    if request.method == "POST":
+        form = ArticleForm(request.POST, instance=article)
+        if form.is_valid():
+            form.save()
+            return redirect("gestion:stocks")
+    else:
+        form = ArticleForm(instance=article)
+    return render(request, "gestion/article_form.html", {"article": article, "form": form})
+
+
+def ajouter_article(request):
+    return _traiter_formulaire_article(request, Article())
+
+
+def modifier_article(request, article_id):
+    article = get_object_or_404(Article, pk=article_id)
+    return _traiter_formulaire_article(request, article)
+
+
+def desactiver_article(request, article_id):
+    """Bouton « Désactiver » du formulaire d'article (issue #55) :
+    l'article reste en base, caché par défaut de la page « Stocks »,
+    jamais supprimé."""
+    article = get_object_or_404(Article, pk=article_id)
+    if request.method == "POST":
+        article.actif = False
+        article.save(update_fields=["actif"])
+        return redirect("gestion:stocks")
+    return redirect("gestion:modifier_article", article_id=article.id)
+
+
+def supprimer_article(request, article_id):
+    """Suppression d'un article derrière une page de confirmation
+    explicite (issue #55), possible seulement s'il n'a aucun
+    mouvement — la clé étrangère protégée (`on_delete=PROTECT`) sert
+    de garde-fou supplémentaire au niveau de la base."""
+    article = get_object_or_404(Article, pk=article_id)
+    a_des_mouvements = article.mouvements.exists()
+    if request.method == "POST":
+        if not a_des_mouvements:
+            article.delete()
+        return redirect("gestion:stocks")
+    return render(request, "gestion/confirmer_suppression_article.html", {
+        "article": article, "a_des_mouvements": a_des_mouvements,
+    })
+
+
+def ajouter_mouvement(request, article_id, sens):
+    """Panneau ouvert depuis le bouton « − » ou « + » de la page
+    « Stocks » (issue #55) : quantité (1 par défaut), motif proposé
+    selon le bouton (modifiable), date, note facultative."""
+    if sens not in ("entree", "sortie"):
+        raise Http404
+    article = get_object_or_404(Article, pk=article_id)
+    motif_defaut = MotifMouvement.ACHAT if sens == "entree" else MotifMouvement.UTILISATION
+
+    if request.method == "POST":
+        form = MouvementForm(request.POST)
+        if form.is_valid():
+            mouvement = form.save(commit=False)
+            mouvement.article = article
+            if sens == "sortie":
+                mouvement.quantite = -mouvement.quantite
+            mouvement.save()
+            return redirect("gestion:stocks")
+    else:
+        form = MouvementForm(initial={
+            "date": timezone.localdate(), "quantite": 1, "motif": motif_defaut,
+        })
+
+    return render(request, "gestion/mouvement_form.html", {
+        "article": article, "form": form, "sens": sens,
+    })
+
+
+def corriger_stock(request, article_id):
+    """Bouton « Corriger le stock » (issue #55) : la quantité
+    réellement comptée est saisie, la différence avec le stock actuel
+    est enregistrée comme mouvement de correction d'inventaire — sans
+    différence, aucun mouvement n'est créé."""
+    article = get_object_or_404(Article, pk=article_id)
+
+    if request.method == "POST":
+        form = CorrectionStockForm(request.POST)
+        if form.is_valid():
+            difference = form.cleaned_data["quantite_comptee"] - article.stock
+            if difference != 0:
+                MouvementStock.objects.create(
+                    article=article, date=form.cleaned_data["date"],
+                    quantite=difference, motif=MotifMouvement.CORRECTION,
+                    note=form.cleaned_data["note"],
+                )
+            return redirect("gestion:stocks")
+    else:
+        form = CorrectionStockForm(initial={
+            "date": timezone.localdate(), "quantite_comptee": article.stock,
+        })
+
+    return render(request, "gestion/correction_stock_form.html", {
+        "article": article, "form": form,
+    })
+
+
+def historique_mouvements(request, article_id):
+    """Historique des mouvements d'un article (issue #55), avec
+    possibilité d'annuler un mouvement après confirmation explicite."""
+    article = get_object_or_404(Article, pk=article_id)
+    return render(request, "gestion/historique_mouvements.html", {
+        "article": article, "mouvements": article.mouvements.all(),
+    })
+
+
+def annuler_mouvement(request, mouvement_id):
+    """Annulation d'un mouvement derrière une page de confirmation
+    explicite (issue #55) : rien n'est supprimé avant la validation de
+    ce formulaire."""
+    mouvement = get_object_or_404(MouvementStock, pk=mouvement_id)
+    if request.method == "POST":
+        article_id = mouvement.article_id
+        mouvement.delete()
+        return redirect("gestion:historique_mouvements", article_id=article_id)
+    return render(request, "gestion/confirmer_annulation_mouvement.html", {
+        "mouvement": mouvement,
+    })
+
+
+def charger_catalogue_depart(request):
+    """Bouton « Charger le catalogue de départ » (issue #55), derrière
+    une page de confirmation explicite : crée les articles manquants
+    du catalogue figé, ne modifie ni ne supprime jamais un article
+    existant, et ne crée aucun mouvement."""
+    if request.method == "POST":
+        resultat = _charger_catalogue_depart()
+        return render(request, "gestion/catalogue_depart_resultat.html", {
+            "resultat": resultat,
+        })
+    return render(request, "gestion/confirmer_catalogue_depart.html")

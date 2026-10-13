@@ -333,3 +333,62 @@ dd { margin: 0; }
 .reine-colonie, .reine-origine, .reine-vendeur, .reine-naissance {
     color: var(--texte-attenue); font-size: 0.9em;
 }
+
+/* Stocks : matériel et consommables (issue #55). */
+
+.bloc-stock-bas {
+    margin: 1.5em 0; padding: 1em; background: var(--fond-tuile);
+    border: 1px solid var(--bordure); border-radius: 8px;
+}
+.bloc-stock-bas h2 { margin-top: 0; }
+.liste-stock-bas { list-style: none; margin: 0; padding: 0; }
+.liste-stock-bas li { padding: 0.3em 0; }
+
+.filtres-stocks {
+    display: flex; flex-wrap: wrap; gap: 1em; align-items: center;
+    margin-bottom: 1.2em; padding: 0.8em; background: var(--fond-tuile);
+    border: 1px solid var(--bordure); border-radius: 8px;
+}
+.filtres-stocks label { display: flex; align-items: center; gap: 0.4em; font-size: 0.95em; }
+.filtre-case input[type="checkbox"] { width: 1.2em; height: 1.2em; accent-color: var(--lien); }
+
+.rubrique-stock { margin-bottom: 1.6em; }
+.rubrique-stock h2 {
+    margin-bottom: 0.6em; border-bottom: 1px solid var(--bordure); padding-bottom: 0.2em;
+}
+
+.liste-articles { list-style: none; margin: 0; padding: 0; }
+.liste-articles li {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 1em; flex-wrap: wrap;
+    padding: 0.8em 0; border-bottom: 1px solid var(--bordure);
+}
+.liste-articles li:last-child { border-bottom: none; }
+.liste-articles li.article-inactif { opacity: 0.6; }
+.article-details { display: flex; align-items: center; gap: 0.6em; flex-wrap: wrap; }
+.article-stock { color: var(--texte-attenue); font-size: 0.9em; }
+.badge-stock-bas {
+    display: inline-block; font-size: 0.78em; padding: 0.15em 0.55em;
+    border-radius: 10px; background: #d9534f; color: #fff;
+}
+
+.boutons-article { display: flex; gap: 0.5em; flex-wrap: wrap; }
+.bouton-stock {
+    display: inline-block; padding: 0.6em 0.9em; font-size: 0.95em;
+    border: 2px solid var(--bordure); border-radius: 8px;
+    background: var(--fond-tuile); color: var(--texte); text-decoration: none;
+}
+.bouton-stock-sens { font-weight: bold; font-size: 1.2em; padding: 0.4em 0.8em; min-width: 2.2em; text-align: center; }
+
+.bouton-catalogue-depart {
+    display: inline-block; margin-top: 1em; padding: 0.7em 1.2em;
+    border: 2px solid var(--lien); border-radius: 10px;
+    color: var(--lien); text-decoration: none; font-weight: bold;
+}
+
+.bouton-desactiver {
+    font-size: 1em; padding: 0.7em 1.3em; border-radius: 8px; cursor: pointer;
+    border: 2px solid var(--bordure); background: var(--fond-tuile); color: var(--texte);
+    margin-right: 0.6em;
+}
+.formulaire-en-ligne { display: inline-block; }

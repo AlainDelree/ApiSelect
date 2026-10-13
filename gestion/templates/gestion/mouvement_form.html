@@ -1,0 +1,46 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% if sens == "entree" %}Entrée{% else %}Sortie{% endif %} de stock — {{ article.nom }} — ApiSelect</title>
+    <link rel="stylesheet" href="{% static 'gestion/style.css' %}">
+</head>
+<body{% if BASE_DE_TEST_ACTIVE %} class="avec-bandeau"{% endif %}>
+    {% if BASE_DE_TEST_ACTIVE %}
+    <div class="bandeau-base-test">⚠️ BASE DE TEST — données fictives</div>
+    {% endif %}
+
+    <p class="lien-retour"><a href="{% url 'gestion:stocks' %}">&larr; Retour aux stocks</a></p>
+
+    <h1>{% if sens == "entree" %}Entrée de stock{% else %}Sortie de stock{% endif %} — {{ article.nom }}</h1>
+    <p>Stock actuel : {{ article.stock }} {{ article.unite }}</p>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <div class="champ-visite">
+            <label for="{{ form.quantite.id_for_label }}">{{ form.quantite.label }}</label>
+            {{ form.quantite }}
+        </div>
+
+        <div class="champ-visite">
+            <label for="{{ form.motif.id_for_label }}">{{ form.motif.label }}</label>
+            {{ form.motif }}
+        </div>
+
+        <div class="champ-visite">
+            <label for="{{ form.date.id_for_label }}">{{ form.date.label }}</label>
+            {{ form.date }}
+        </div>
+
+        <div class="champ-visite">
+            <label for="{{ form.note.id_for_label }}">{{ form.note.label }}</label>
+            {{ form.note }}
+        </div>
+
+        <button type="submit" class="bouton-enregistrer">Enregistrer</button>
+    </form>
+</body>
+</html>

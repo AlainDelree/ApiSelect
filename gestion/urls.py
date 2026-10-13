@@ -55,4 +55,38 @@ urlpatterns = [
         "observations/<int:observation_id>/infirmer/",
         views.infirmer_observation, name="infirmer_observation",
     ),
+    path("stocks/", views.stocks, name="stocks"),
+    path("stocks/articles/ajouter/", views.ajouter_article, name="ajouter_article"),
+    path(
+        "stocks/articles/<int:article_id>/modifier/",
+        views.modifier_article, name="modifier_article",
+    ),
+    path(
+        "stocks/articles/<int:article_id>/desactiver/",
+        views.desactiver_article, name="desactiver_article",
+    ),
+    path(
+        "stocks/articles/<int:article_id>/supprimer/",
+        views.supprimer_article, name="supprimer_article",
+    ),
+    path(
+        "stocks/articles/<int:article_id>/mouvement/<str:sens>/",
+        views.ajouter_mouvement, name="ajouter_mouvement",
+    ),
+    path(
+        "stocks/articles/<int:article_id>/corriger/",
+        views.corriger_stock, name="corriger_stock",
+    ),
+    path(
+        "stocks/articles/<int:article_id>/historique/",
+        views.historique_mouvements, name="historique_mouvements",
+    ),
+    path(
+        "stocks/mouvements/<int:mouvement_id>/annuler/",
+        views.annuler_mouvement, name="annuler_mouvement",
+    ),
+    path(
+        "stocks/charger-catalogue/",
+        views.charger_catalogue_depart, name="charger_catalogue_depart",
+    ),
 ]

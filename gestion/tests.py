@@ -22,15 +22,22 @@ from selection.models import (
 )
 
 from .affichage import COULEUR_GRISE_PAR_DEFAUT, bande_ruche
+from .catalogue_stocks import CATALOGUE_DEPART, charger_catalogue_depart
 from .couleurs import couleur_marquage_pour_annee
 from .forms import NouvelleReineForm, ReineForm
 from .models import (
     DELAI_RAPPEL_REINE_MORTE_JOURS,
     ActionVisite,
+    Article,
     CertitudeObservation,
+    FamilleMateriel,
+    MotifMouvement,
+    MouvementStock,
+    NatureArticle,
     ObservationVisite,
     RappelRevisite,
     ReponseCellulesRoyales,
+    RubriqueArticle,
     StatutObservation,
     TypeActionVisite,
     TypeObservationVisite,
@@ -2146,3 +2153,463 @@ class ModifierReineTests(TestCase):
         page = self.client.get(reverse("gestion:accueil"))
 
         self.assertContains(page, reverse("gestion:liste_reines"))
+
+
+class StockArticleTests(TestCase):
+    """Calcul du stock et mouvements (issue #55) : le stock d'un
+    article n'est jamais qu'une somme de mouvements, jamais un total
+    modifié directement."""
+
+    def setUp(self):
+        self.article = Article.objects.create(
+            nom="Seau-test-55", rubrique=RubriqueArticle.RECOLTE,
+            nature=NatureArticle.DURABLE, unite="pièce",
+        )
+
+    def test_stock_zero_sans_mouvement(self):
+        self.assertEqual(self.article.stock, 0)
+
+    def test_stock_est_la_somme_des_mouvements(self):
+        MouvementStock.objects.create(
+            article=self.article, date="2026-01-01", quantite=10,
+            motif=MotifMouvement.STOCK_INITIAL,
+        )
+        MouvementStock.objects.create(
+            article=self.article, date="2026-01-02", quantite=-3,
+            motif=MotifMouvement.UTILISATION,
+        )
+
+        self.assertEqual(self.article.stock, 7)
+
+    def test_mouvement_sortie_depuis_le_panneau_decremente_le_stock(self):
+        MouvementStock.objects.create(
+            article=self.article, date="2026-01-01", quantite=5,
+            motif=MotifMouvement.STOCK_INITIAL,
+        )
+
+        reponse = self.client.post(
+            reverse("gestion:ajouter_mouvement", args=[self.article.id, "sortie"]),
+            {
+                "date": "2026-01-03", "quantite": "2",
+                "motif": MotifMouvement.UTILISATION, "note": "",
+            },
+        )
+
+        self.assertRedirects(reponse, reverse("gestion:stocks"))
+        self.assertEqual(self.article.stock, 3)
+
+    def test_mouvement_entree_depuis_le_panneau_incremente_le_stock(self):
+        reponse = self.client.post(
+            reverse("gestion:ajouter_mouvement", args=[self.article.id, "entree"]),
+            {
+                "date": "2026-01-03", "quantite": "4",
+                "motif": MotifMouvement.ACHAT, "note": "",
+            },
+        )
+
+        self.assertRedirects(reponse, reverse("gestion:stocks"))
+        self.assertEqual(self.article.stock, 4)
+
+    def test_motif_propose_achat_pour_une_entree(self):
+        reponse = self.client.get(
+            reverse("gestion:ajouter_mouvement", args=[self.article.id, "entree"]),
+        )
+
+        self.assertEqual(reponse.context["form"].initial["motif"], MotifMouvement.ACHAT)
+
+    def test_motif_propose_utilisation_pour_une_sortie(self):
+        reponse = self.client.get(
+            reverse("gestion:ajouter_mouvement", args=[self.article.id, "sortie"]),
+        )
+
+        self.assertEqual(reponse.context["form"].initial["motif"], MotifMouvement.UTILISATION)
+
+    def test_sens_invalide_404(self):
+        reponse = self.client.get(
+            reverse("gestion:ajouter_mouvement", args=[self.article.id, "autre"]),
+        )
+
+        self.assertEqual(reponse.status_code, 404)
+
+
+class CorrectionStockTests(TestCase):
+    """Bouton « Corriger le stock » (issue #55) : la différence avec la
+    quantité réellement comptée s'enregistre comme mouvement de
+    correction d'inventaire."""
+
+    def setUp(self):
+        self.article = Article.objects.create(
+            nom="Peson-test-55", rubrique=RubriqueArticle.RECOLTE,
+            nature=NatureArticle.DURABLE, unite="pièce",
+        )
+        MouvementStock.objects.create(
+            article=self.article, date="2026-01-01", quantite=10,
+            motif=MotifMouvement.STOCK_INITIAL,
+        )
+
+    def test_correction_enregistre_la_difference(self):
+        reponse = self.client.post(
+            reverse("gestion:corriger_stock", args=[self.article.id]),
+            {"quantite_comptee": "8", "date": "2026-01-05", "note": "recomptage"},
+        )
+
+        self.assertRedirects(reponse, reverse("gestion:stocks"))
+        self.assertEqual(self.article.stock, 8)
+        mouvement_correction = MouvementStock.objects.get(motif=MotifMouvement.CORRECTION)
+        self.assertEqual(mouvement_correction.quantite, -2)
+
+    def test_correction_sans_difference_ne_cree_aucun_mouvement(self):
+        self.client.post(
+            reverse("gestion:corriger_stock", args=[self.article.id]),
+            {"quantite_comptee": "10", "date": "2026-01-05", "note": ""},
+        )
+
+        self.assertEqual(
+            MouvementStock.objects.filter(motif=MotifMouvement.CORRECTION).count(), 0,
+        )
+
+
+class StockBasTests(TestCase):
+    """Badge « Stock bas » et bloc de l'accueil (issue #55) : présent
+    sous le seuil, absent au-dessus, absent sans seuil défini."""
+
+    def test_badge_present_sous_le_seuil(self):
+        article = Article.objects.create(
+            nom="Cire gaufrée-test-55", rubrique=RubriqueArticle.ATELIER,
+            nature=NatureArticle.CONSOMMABLE, unite="feuille", seuil_alerte=5,
+        )
+        MouvementStock.objects.create(
+            article=article, date="2026-01-01", quantite=2, motif=MotifMouvement.STOCK_INITIAL,
+        )
+
+        page = self.client.get(reverse("gestion:stocks"))
+
+        self.assertContains(page, "badge-stock-bas")
+
+    def test_badge_absent_au_dessus_du_seuil(self):
+        article = Article.objects.create(
+            nom="Fil de fer-test-55", rubrique=RubriqueArticle.ATELIER,
+            nature=NatureArticle.CONSOMMABLE, unite="bobine", seuil_alerte=5,
+        )
+        MouvementStock.objects.create(
+            article=article, date="2026-01-01", quantite=10, motif=MotifMouvement.STOCK_INITIAL,
+        )
+
+        page = self.client.get(reverse("gestion:stocks"))
+
+        self.assertNotContains(page, "badge-stock-bas")
+
+    def test_badge_absent_sans_seuil_defini(self):
+        Article.objects.create(
+            nom="Marteau-test-55", rubrique=RubriqueArticle.ATELIER,
+            nature=NatureArticle.DURABLE, unite="pièce",
+        )
+
+        page = self.client.get(reverse("gestion:stocks"))
+
+        self.assertNotContains(page, "badge-stock-bas")
+
+    def test_bloc_accueil_present_sous_le_seuil(self):
+        Article.objects.create(
+            nom="Pot-test-bas-55", rubrique=RubriqueArticle.RECOLTE,
+            nature=NatureArticle.CONSOMMABLE, unite="pièce", seuil_alerte=10,
+        )
+
+        page = self.client.get(reverse("gestion:accueil"))
+
+        self.assertContains(page, "bloc-stock-bas")
+        self.assertContains(page, "Pot-test-bas-55")
+
+    def test_bloc_accueil_absent_sans_article_sous_le_seuil(self):
+        article = Article.objects.create(
+            nom="Pot-test-ok-55", rubrique=RubriqueArticle.RECOLTE,
+            nature=NatureArticle.CONSOMMABLE, unite="pièce", seuil_alerte=10,
+        )
+        MouvementStock.objects.create(
+            article=article, date="2026-01-01", quantite=20, motif=MotifMouvement.STOCK_INITIAL,
+        )
+
+        page = self.client.get(reverse("gestion:accueil"))
+
+        self.assertNotContains(page, "bloc-stock-bas")
+
+
+class FiltreFamilleStockTests(TestCase):
+    """Filtre par famille de matériel (issue #55) : une pièce commune
+    à plusieurs familles apparaît pour chacune."""
+
+    def setUp(self):
+        self.famille_ruche10 = FamilleMateriel.objects.create(nom="Ruche 10 cadres-test")
+        self.famille_ruchette6 = FamilleMateriel.objects.create(nom="Ruchette 6 cadres-test")
+        self.article_commun = Article.objects.create(
+            nom="cadre de corps-test-55", rubrique=RubriqueArticle.RUCHE,
+            nature=NatureArticle.DURABLE, unite="pièce",
+        )
+        self.article_commun.familles_compatibles.set(
+            [self.famille_ruche10, self.famille_ruchette6],
+        )
+
+    def test_article_compatible_apparait_pour_chaque_famille(self):
+        page_ruche10 = self.client.get(
+            reverse("gestion:stocks"), {"famille": self.famille_ruche10.id},
+        )
+        page_ruchette6 = self.client.get(
+            reverse("gestion:stocks"), {"famille": self.famille_ruchette6.id},
+        )
+
+        self.assertContains(page_ruche10, "cadre de corps-test-55")
+        self.assertContains(page_ruchette6, "cadre de corps-test-55")
+
+    def test_article_absent_pour_une_famille_non_compatible(self):
+        famille_miniplus = FamilleMateriel.objects.create(nom="Miniplus-test")
+
+        page = self.client.get(reverse("gestion:stocks"), {"famille": famille_miniplus.id})
+
+        self.assertNotContains(page, "cadre de corps-test-55")
+
+
+class ArticlesInactifsTests(TestCase):
+    """Un article inactif reste en base, caché par défaut (issue
+    #55)."""
+
+    def setUp(self):
+        self.article_actif = Article.objects.create(
+            nom="Actif-test-55", rubrique=RubriqueArticle.VISITE,
+            nature=NatureArticle.DURABLE, unite="pièce",
+        )
+        self.article_inactif = Article.objects.create(
+            nom="Inactif-test-55", rubrique=RubriqueArticle.VISITE,
+            nature=NatureArticle.DURABLE, unite="pièce", actif=False,
+        )
+
+    def test_masque_par_defaut(self):
+        page = self.client.get(reverse("gestion:stocks"))
+
+        self.assertContains(page, "Actif-test-55")
+        self.assertNotContains(page, "Inactif-test-55")
+
+    def test_affiche_avec_le_filtre(self):
+        page = self.client.get(reverse("gestion:stocks"), {"inactifs": "1"})
+
+        self.assertContains(page, "Inactif-test-55")
+
+    def test_bouton_desactiver_rend_larticle_inactif(self):
+        self.client.post(
+            reverse("gestion:desactiver_article", args=[self.article_actif.id]),
+        )
+
+        self.article_actif.refresh_from_db()
+        self.assertFalse(self.article_actif.actif)
+
+
+class SuppressionArticleTests(TestCase):
+    """Un article n'est supprimable que s'il n'a aucun mouvement
+    (issue #55)."""
+
+    def setUp(self):
+        self.article = Article.objects.create(
+            nom="A-supprimer-test-55", rubrique=RubriqueArticle.VISITE,
+            nature=NatureArticle.DURABLE, unite="pièce",
+        )
+
+    def test_suppression_possible_sans_mouvement(self):
+        reponse = self.client.post(
+            reverse("gestion:supprimer_article", args=[self.article.id]),
+        )
+
+        self.assertRedirects(reponse, reverse("gestion:stocks"))
+        self.assertFalse(Article.objects.filter(id=self.article.id).exists())
+
+    def test_suppression_refusee_avec_un_mouvement(self):
+        MouvementStock.objects.create(
+            article=self.article, date="2026-01-01", quantite=1,
+            motif=MotifMouvement.STOCK_INITIAL,
+        )
+
+        reponse = self.client.post(
+            reverse("gestion:supprimer_article", args=[self.article.id]),
+        )
+
+        self.assertEqual(reponse.status_code, 302)
+        self.assertTrue(Article.objects.filter(id=self.article.id).exists())
+
+    def test_page_de_confirmation_indique_limpossibilite(self):
+        MouvementStock.objects.create(
+            article=self.article, date="2026-01-01", quantite=1,
+            motif=MotifMouvement.STOCK_INITIAL,
+        )
+
+        reponse = self.client.get(
+            reverse("gestion:supprimer_article", args=[self.article.id]),
+        )
+
+        self.assertContains(reponse, "Impossible")
+
+
+class AnnulationMouvementTests(TestCase):
+    """Annulation d'un mouvement derrière une confirmation explicite
+    (issue #55)."""
+
+    def setUp(self):
+        self.article = Article.objects.create(
+            nom="A-annulation-test-55", rubrique=RubriqueArticle.VISITE,
+            nature=NatureArticle.DURABLE, unite="pièce",
+        )
+        self.mouvement = MouvementStock.objects.create(
+            article=self.article, date="2026-01-01", quantite=5,
+            motif=MotifMouvement.STOCK_INITIAL,
+        )
+
+    def test_sans_confirmation_rien_nest_supprime(self):
+        self.client.get(reverse("gestion:annuler_mouvement", args=[self.mouvement.id]))
+
+        self.assertTrue(MouvementStock.objects.filter(id=self.mouvement.id).exists())
+
+    def test_confirmation_supprime_le_mouvement_et_recalcule_le_stock(self):
+        reponse = self.client.post(
+            reverse("gestion:annuler_mouvement", args=[self.mouvement.id]),
+        )
+
+        self.assertRedirects(
+            reponse, reverse("gestion:historique_mouvements", args=[self.article.id]),
+        )
+        self.assertFalse(MouvementStock.objects.filter(id=self.mouvement.id).exists())
+        self.assertEqual(self.article.stock, 0)
+
+
+class CatalogueDepartTests(TestCase):
+    """Chargement du catalogue de départ (issue #55) : additif
+    uniquement, jamais de mouvement créé, idempotent."""
+
+    def test_charge_les_articles_manquants(self):
+        resultat = charger_catalogue_depart()
+
+        self.assertEqual(resultat["crees"], len(CATALOGUE_DEPART))
+        self.assertEqual(resultat["deja_presents"], 0)
+        self.assertEqual(Article.objects.count(), len(CATALOGUE_DEPART))
+        self.assertTrue(
+            Article.objects.filter(nom="corps de ruche", rubrique=RubriqueArticle.RUCHE).exists(),
+        )
+
+    def test_ne_cree_aucun_mouvement(self):
+        charger_catalogue_depart()
+
+        self.assertEqual(MouvementStock.objects.count(), 0)
+        for article in Article.objects.all():
+            self.assertEqual(article.stock, 0)
+
+    def test_ne_modifie_pas_un_article_existant(self):
+        Article.objects.create(
+            nom="corps de ruche", rubrique=RubriqueArticle.RUCHE,
+            nature=NatureArticle.CONSOMMABLE, unite="litre", seuil_alerte=3, actif=False,
+        )
+
+        charger_catalogue_depart()
+
+        article = Article.objects.get(nom="corps de ruche", rubrique=RubriqueArticle.RUCHE)
+        self.assertEqual(article.nature, NatureArticle.CONSOMMABLE)
+        self.assertEqual(article.unite, "litre")
+        self.assertEqual(article.seuil_alerte, 3)
+        self.assertFalse(article.actif)
+
+    def test_resultat_identique_lance_deux_fois(self):
+        charger_catalogue_depart()
+        nombre_apres_premier = Article.objects.count()
+
+        resultat_deuxieme = charger_catalogue_depart()
+
+        self.assertEqual(resultat_deuxieme["crees"], 0)
+        self.assertEqual(resultat_deuxieme["deja_presents"], len(CATALOGUE_DEPART))
+        self.assertEqual(Article.objects.count(), nombre_apres_premier)
+        self.assertEqual(MouvementStock.objects.count(), 0)
+
+    def test_piece_commune_compatible_avec_plusieurs_familles(self):
+        charger_catalogue_depart()
+
+        cadre = Article.objects.get(nom="cadre de corps", rubrique=RubriqueArticle.RUCHE)
+        noms_familles = set(cadre.familles_compatibles.values_list("nom", flat=True))
+        self.assertEqual(noms_familles, {"Ruche 10 cadres", "Ruchette 6 cadres"})
+
+    def test_vue_confirmation_puis_chargement(self):
+        page_confirmation = self.client.get(reverse("gestion:charger_catalogue_depart"))
+        self.assertEqual(page_confirmation.status_code, 200)
+        self.assertEqual(Article.objects.count(), 0)
+
+        reponse = self.client.post(reverse("gestion:charger_catalogue_depart"))
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertEqual(Article.objects.count(), len(CATALOGUE_DEPART))
+
+
+class FormulaireArticleTests(TestCase):
+    """Formulaire unique d'un article, création et modification (issue
+    #55) : mêmes champs partout."""
+
+    def test_creation_article(self):
+        reponse = self.client.post(
+            reverse("gestion:ajouter_article"),
+            {
+                "nom": "Nouvel article-test-55", "rubrique": RubriqueArticle.VISITE,
+                "nature": NatureArticle.DURABLE, "unite": "pièce",
+            },
+        )
+
+        self.assertRedirects(reponse, reverse("gestion:stocks"))
+        self.assertTrue(Article.objects.filter(nom="Nouvel article-test-55").exists())
+
+    def test_formulaires_de_creation_et_de_modification_memes_champs(self):
+        article = Article.objects.create(
+            nom="A-modif-test-55", rubrique=RubriqueArticle.VISITE,
+            nature=NatureArticle.DURABLE, unite="pièce",
+        )
+
+        reponse_creation = self.client.get(reverse("gestion:ajouter_article"))
+        reponse_modification = self.client.get(
+            reverse("gestion:modifier_article", args=[article.id]),
+        )
+
+        self.assertEqual(
+            set(reponse_creation.context["form"].fields),
+            set(reponse_modification.context["form"].fields),
+        )
+
+
+class AdminStocksTests(TestCase):
+    """Administration des stocks (issue #55) : les référentiels
+    restent modifiables (familles de matériel), mais aucun ajout n'est
+    possible pour les articles et les mouvements — la saisie se fait
+    par l'interface visuelle."""
+
+    def setUp(self):
+        self.superuser = get_user_model().objects.create_superuser(
+            username="admin-stocks", email="admin-stocks@example.com",
+            password="motdepasse",
+        )
+        self.client.force_login(self.superuser)
+
+    def test_ajout_darticle_refuse_dans_ladmin(self):
+        reponse = self.client.get(reverse("admin:gestion_article_add"))
+        self.assertEqual(reponse.status_code, 403)
+
+    def test_ajout_de_mouvement_refuse_dans_ladmin(self):
+        reponse = self.client.get(reverse("admin:gestion_mouvementstock_add"))
+        self.assertEqual(reponse.status_code, 403)
+
+    def test_ajout_de_famille_de_materiel_autorise_dans_ladmin(self):
+        reponse = self.client.get(reverse("admin:gestion_famillemateriel_add"))
+        self.assertEqual(reponse.status_code, 200)
+
+    def test_consultation_darticle_toujours_disponible(self):
+        article = Article.objects.create(
+            nom="A-admin-test-55", rubrique=RubriqueArticle.VISITE,
+            nature=NatureArticle.DURABLE, unite="pièce",
+        )
+
+        self.assertEqual(
+            self.client.get(reverse("admin:gestion_article_changelist")).status_code, 200,
+        )
+        self.assertEqual(
+            self.client.get(
+                reverse("admin:gestion_article_change", args=[article.id]),
+            ).status_code, 200,
+        )

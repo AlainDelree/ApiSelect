@@ -1,0 +1,88 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Stocks — ApiSelect</title>
+    <link rel="stylesheet" href="{% static 'gestion/style.css' %}">
+</head>
+<body{% if BASE_DE_TEST_ACTIVE %} class="avec-bandeau"{% endif %}>
+    {% if BASE_DE_TEST_ACTIVE %}
+    <div class="bandeau-base-test">⚠️ BASE DE TEST — données fictives</div>
+    {% endif %}
+
+    <p class="lien-retour"><a href="{% url 'gestion:accueil' %}">&larr; Retour à l'accueil</a></p>
+
+    <h1>Stocks</h1>
+
+    <p>
+        <a class="bouton-nouvelle-reine" href="{% url 'gestion:ajouter_article' %}">+ Ajouter un article</a>
+    </p>
+
+    <form method="get" class="filtres-stocks">
+        <label>
+            Famille
+            <select name="famille" onchange="this.form.submit()">
+                <option value="">Toutes</option>
+                {% for famille in familles %}
+                <option value="{{ famille.id }}" {% if famille_id == famille.id|stringformat:"s" %}selected{% endif %}>
+                    {{ famille.nom }}
+                </option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>
+            Rubrique
+            <select name="rubrique" onchange="this.form.submit()">
+                <option value="">Toutes</option>
+                {% for code, libelle in rubriques %}
+                <option value="{{ code }}" {% if rubrique == code %}selected{% endif %}>{{ libelle }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label class="filtre-case">
+            <input type="checkbox" name="stock_bas" value="1" {% if stock_bas_seulement %}checked{% endif %} onchange="this.form.submit()">
+            Stock bas seulement
+        </label>
+        <label class="filtre-case">
+            <input type="checkbox" name="inactifs" value="1" {% if afficher_inactifs %}checked{% endif %} onchange="this.form.submit()">
+            Afficher les articles inactifs
+        </label>
+        <noscript><button type="submit">Filtrer</button></noscript>
+    </form>
+
+    {% if not groupes %}
+    <p class="message-vide">Aucun article ne correspond à ces filtres.</p>
+    {% endif %}
+
+    {% for groupe in groupes %}
+    <section class="rubrique-stock">
+        <h2>{{ groupe.libelle }}</h2>
+        <ul class="liste-articles">
+            {% for article in groupe.articles %}
+            <li{% if not article.actif %} class="article-inactif"{% endif %}>
+                <div class="article-details">
+                    <strong>{{ article.nom }}</strong>
+                    {% if not article.actif %}<span class="tag-observation">n'est plus utilisé</span>{% endif %}
+                    {% if article.stock_bas %}<span class="badge-stock-bas">Stock bas</span>{% endif %}
+                    <span class="article-stock">{{ article.stock }} {{ article.unite }}</span>
+                </div>
+                <div class="boutons-article">
+                    <a class="bouton-stock bouton-stock-sens" href="{% url 'gestion:ajouter_mouvement' article.id 'sortie' %}" aria-label="Retirer du stock">−</a>
+                    <a class="bouton-stock bouton-stock-sens" href="{% url 'gestion:ajouter_mouvement' article.id 'entree' %}" aria-label="Ajouter au stock">+</a>
+                    <a class="bouton-stock" href="{% url 'gestion:corriger_stock' article.id %}">Corriger le stock</a>
+                    <a class="bouton-stock" href="{% url 'gestion:historique_mouvements' article.id %}">Historique</a>
+                    <a class="bouton-stock" href="{% url 'gestion:modifier_article' article.id %}">Modifier</a>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endfor %}
+
+    <p>
+        <a class="bouton-catalogue-depart" href="{% url 'gestion:charger_catalogue_depart' %}">Charger le catalogue de départ</a>
+    </p>
+</body>
+</html>

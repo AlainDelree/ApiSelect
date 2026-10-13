@@ -1,0 +1,74 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% if article.pk %}Modifier {{ article.nom }}{% else %}Ajouter un article{% endif %} — ApiSelect</title>
+    <link rel="stylesheet" href="{% static 'gestion/style.css' %}">
+</head>
+<body{% if BASE_DE_TEST_ACTIVE %} class="avec-bandeau"{% endif %}>
+    {% if BASE_DE_TEST_ACTIVE %}
+    <div class="bandeau-base-test">⚠️ BASE DE TEST — données fictives</div>
+    {% endif %}
+
+    <p class="lien-retour"><a href="{% url 'gestion:stocks' %}">&larr; Retour aux stocks</a></p>
+
+    <h1>{% if article.pk %}Modifier {{ article.nom }}{% else %}Ajouter un article{% endif %}</h1>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <div class="champ-visite">
+            <label for="{{ form.nom.id_for_label }}">{{ form.nom.label }}</label>
+            {{ form.nom }}
+        </div>
+
+        <div class="champ-visite">
+            <p class="etiquette">{{ form.rubrique.label }}</p>
+            {{ form.rubrique }}
+        </div>
+
+        <div class="champ-visite">
+            <p class="etiquette">{{ form.nature.label }}</p>
+            {{ form.nature }}
+        </div>
+
+        <div class="champ-visite">
+            <label for="{{ form.unite.id_for_label }}">{{ form.unite.label }}</label>
+            {{ form.unite }}
+        </div>
+
+        <div class="champ-visite">
+            <label for="{{ form.seuil_alerte.id_for_label }}">{{ form.seuil_alerte.label }}</label>
+            {{ form.seuil_alerte }}
+        </div>
+
+        <div class="champ-visite">
+            <p class="etiquette">{{ form.familles_compatibles.label }}</p>
+            {{ form.familles_compatibles }}
+        </div>
+
+        <div class="champ-visite">
+            <label for="{{ form.notes.id_for_label }}">{{ form.notes.label }}</label>
+            {{ form.notes }}
+        </div>
+
+        <button type="submit" class="bouton-enregistrer">
+            {% if article.pk %}Enregistrer les modifications{% else %}Enregistrer l'article{% endif %}
+        </button>
+    </form>
+
+    {% if article.pk %}
+    <p>
+        {% if article.actif %}
+        <form method="post" action="{% url 'gestion:desactiver_article' article.id %}" class="formulaire-en-ligne">
+            {% csrf_token %}
+            <button type="submit" class="bouton-desactiver">Désactiver</button>
+        </form>
+        {% endif %}
+        <a class="bouton-supprimer" href="{% url 'gestion:supprimer_article' article.id %}">Supprimer cet article</a>
+    </p>
+    {% endif %}
+</body>
+</html>
