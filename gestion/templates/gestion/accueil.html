@@ -46,6 +46,18 @@
     </section>
     {% endif %}
 
+    {% if articles_stock_negatif %}
+    <section class="bloc-stock-negatif">
+        <h2>Stock négatif</h2>
+        <ul class="liste-stock-negatif">
+            {% for article in articles_stock_negatif %}
+            <li>{{ article.nom }} — {{ article.stock }} {{ article.unite }}</li>
+            {% endfor %}
+        </ul>
+        <p><a href="{% url 'gestion:stocks' %}?stock_negatif=1">Voir les stocks &rarr;</a></p>
+    </section>
+    {% endif %}
+
     {% if rappels_a_revisiter %}
     <section class="bloc-a-revisiter">
         <h2>À revérifier</h2>

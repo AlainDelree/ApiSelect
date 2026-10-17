@@ -373,6 +373,10 @@ class Article(models.Model):
     def stock_bas(self):
         return self.seuil_alerte is not None and self.stock < self.seuil_alerte
 
+    @property
+    def stock_negatif(self):
+        return self.stock < 0
+
 
 class MouvementStock(models.Model):
     """Mouvement de stock d'un article : quantité signée (entrée

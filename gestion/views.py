@@ -176,6 +176,10 @@ def accueil(request):
         article for article in Article.objects.filter(actif=True, seuil_alerte__isnull=False)
         if article.stock_bas
     ]
+    articles_stock_negatif = [
+        article for article in Article.objects.filter(actif=True)
+        if article.stock_negatif
+    ]
 
     return render(request, "gestion/accueil.html", {
         "sections": sections,
@@ -186,6 +190,7 @@ def accueil(request):
         ).count(),
         "rappels_a_revisiter": rappels_a_revisiter,
         "articles_stock_bas": articles_stock_bas,
+        "articles_stock_negatif": articles_stock_negatif,
     })
 
 
@@ -568,9 +573,11 @@ def stocks(request):
     """Page « Stocks » (issue #55) : articles groupés par rubrique,
     stock actuel (toujours recalculé depuis les mouvements),
     filtrables par famille de matériel, par rubrique, « stock bas
-    seulement », et masquant par défaut les articles inactifs."""
+    seulement », « stock négatif seulement », et masquant par défaut
+    les articles inactifs."""
     afficher_inactifs = request.GET.get("inactifs") == "1"
     stock_bas_seulement = request.GET.get("stock_bas") == "1"
+    stock_negatif_seulement = request.GET.get("stock_negatif") == "1"
     famille_id = request.GET.get("famille") or ""
     rubrique = request.GET.get("rubrique") or ""
 
@@ -587,6 +594,8 @@ def stocks(request):
     for article in articles:
         if stock_bas_seulement and not article.stock_bas:
             continue
+        if stock_negatif_seulement and not article.stock_negatif:
+            continue
         groupes_par_rubrique.setdefault(article.rubrique, []).append(article)
 
     groupes = [
@@ -601,6 +610,7 @@ def stocks(request):
         "rubriques": RubriqueArticle.choices,
         "afficher_inactifs": afficher_inactifs,
         "stock_bas_seulement": stock_bas_seulement,
+        "stock_negatif_seulement": stock_negatif_seulement,
         "famille_id": famille_id,
         "rubrique": rubrique,
     })
@@ -660,28 +670,46 @@ def supprimer_article(request, article_id):
 def ajouter_mouvement(request, article_id, sens):
     """Panneau ouvert depuis le bouton « − » ou « + » de la page
     « Stocks » (issue #55) : quantité (1 par défaut), motif proposé
-    selon le bouton (modifiable), date, note facultative."""
+    selon le bouton (modifiable), date, note facultative. Pour une
+    sortie, un avertissement est affiché si le mouvement rendrait le
+    stock négatif — sans bloquer l'enregistrement (issue #57)."""
     if sens not in ("entree", "sortie"):
         raise Http404
     article = get_object_or_404(Article, pk=article_id)
     motif_defaut = MotifMouvement.ACHAT if sens == "entree" else MotifMouvement.UTILISATION
 
+    futur_stock_negatif = False
     if request.method == "POST":
         form = MouvementForm(request.POST)
         if form.is_valid():
+            quantite = form.cleaned_data["quantite"]
+            if sens == "sortie":
+                quantite = -quantite
+                futur_stock_negatif = (article.stock + quantite) < 0
             mouvement = form.save(commit=False)
             mouvement.article = article
-            if sens == "sortie":
-                mouvement.quantite = -mouvement.quantite
+            mouvement.quantite = quantite
             mouvement.save()
             return redirect("gestion:stocks")
+        # Formulaire invalide : calculer l'avertissement avec la quantité soumise
+        elif form.is_bound:
+            try:
+                quantite = form.cleaned_data.get("quantite") or float(request.POST.get("quantite", 1))
+                if sens == "sortie":
+                    futur_stock_negatif = (article.stock - quantite) < 0
+            except (ValueError, TypeError):
+                pass
     else:
+        # Calculer l'avertissement basé sur la quantité par défaut (1)
+        if sens == "sortie":
+            futur_stock_negatif = (article.stock - 1) < 0
         form = MouvementForm(initial={
             "date": timezone.localdate(), "quantite": 1, "motif": motif_defaut,
         })
 
     return render(request, "gestion/mouvement_form.html", {
         "article": article, "form": form, "sens": sens,
+        "futur_stock_negatif": futur_stock_negatif,
     })
 
 

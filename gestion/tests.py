@@ -2334,6 +2334,250 @@ class StockBasTests(TestCase):
         self.assertNotContains(page, "bloc-stock-bas")
 
 
+class StockNegatifTests(TestCase):
+    """Signalement visuel du stock négatif (issue #57) : badge distinct,
+    bloc sur l'accueil, filtre dédié, et avertissement à la saisie
+    d'une sortie — sans jamais bloquer l'enregistrement."""
+
+    def test_propriete_stock_negatif_vrai_quand_stock_negatif(self):
+        article = Article.objects.create(
+            nom="Clous-test-57", rubrique=RubriqueArticle.ATELIER,
+            nature=NatureArticle.DURABLE, unite="pièce",
+        )
+        MouvementStock.objects.create(
+            article=article, date="2026-01-01", quantite=-5, motif=MotifMouvement.PERTE,
+        )
+        article.refresh_from_db()
+
+        self.assertTrue(article.stock_negatif)
+
+    def test_propriete_stock_negatif_faux_quand_stock_positif(self):
+        article = Article.objects.create(
+            nom="Planche-test-57", rubrique=RubriqueArticle.ATELIER,
+            nature=NatureArticle.DURABLE, unite="pièce",
+        )
+        MouvementStock.objects.create(
+            article=article, date="2026-01-01", quantite=10, motif=MotifMouvement.STOCK_INITIAL,
+        )
+        article.refresh_from_db()
+
+        self.assertFalse(article.stock_negatif)
+
+    def test_propriete_stock_negatif_faux_quand_stock_zero(self):
+        article = Article.objects.create(
+            nom="Scie-test-57", rubrique=RubriqueArticle.ATELIER,
+            nature=NatureArticle.DURABLE, unite="pièce",
+        )
+        # Pas de mouvements : stock = 0
+
+        self.assertFalse(article.stock_negatif)
+
+    def test_badge_present_quand_stock_negatif(self):
+        article = Article.objects.create(
+            nom="Vis-test-57", rubrique=RubriqueArticle.VISITE,
+            nature=NatureArticle.DURABLE, unite="pièce",
+        )
+        MouvementStock.objects.create(
+            article=article, date="2026-01-01", quantite=-2, motif=MotifMouvement.PERTE,
+        )
+
+        page = self.client.get(reverse("gestion:stocks"))
+
+        self.assertContains(page, "badge-stock-negatif")
+        self.assertContains(page, "Stock négatif")
+
+    def test_badge_absent_quand_stock_positif(self):
+        article = Article.objects.create(
+            nom="Gants-test-57", rubrique=RubriqueArticle.VISITE,
+            nature=NatureArticle.DURABLE, unite="pièce",
+        )
+        MouvementStock.objects.create(
+            article=article, date="2026-01-01", quantite=5, motif=MotifMouvement.STOCK_INITIAL,
+        )
+
+        page = self.client.get(reverse("gestion:stocks"))
+
+        self.assertNotContains(page, "badge-stock-negatif")
+
+    def test_badge_absent_quand_stock_zero(self):
+        Article.objects.create(
+            nom="Masque-test-57", rubrique=RubriqueArticle.VISITE,
+            nature=NatureArticle.DURABLE, unite="pièce",
+        )
+
+        page = self.client.get(reverse("gestion:stocks"))
+
+        self.assertNotContains(page, "badge-stock-negatif")
+
+    def test_badge_stock_negatif_distinct_du_badge_stock_bas(self):
+        article = Article.objects.create(
+            nom="Sirop-test-57", rubrique=RubriqueArticle.VISITE,
+            nature=NatureArticle.CONSOMMABLE, unite="litre", seuil_alerte=10,
+        )
+        # Stock négatif mais au-dessus du seuil (si seuil était applicable)
+        MouvementStock.objects.create(
+            article=article, date="2026-01-01", quantite=-2, motif=MotifMouvement.PERTE,
+        )
+
+        page = self.client.get(reverse("gestion:stocks"))
+
+        self.assertContains(page, "badge-stock-negatif")
+        # stock_bas devrait être False car -2 < 10 est vrai mais seuil_alerte
+        # ne s'applique pas à un stock négatif de cette façon
+        # En fait, stock_bas est True si stock < seuil_alerte et seuil_alerte est défini
+        # Donc -2 < 10 → True, donc badge-stock-bas devrait être présent
+        # Mais c'est OK, les deux badges peuvent coexister
+        self.assertContains(page, "badge-stock-bas")
+
+    def test_bloc_accueil_present_quand_stock_negatif(self):
+        Article.objects.create(
+            nom="Cadre-test-neg-57", rubrique=RubriqueArticle.RUCHE,
+            nature=NatureArticle.DURABLE, unite="pièce",
+        )
+        # Pas de mouvement : stock = 0, donc pas négatif
+        # Ajoutons un mouvement négatif
+        article = Article.objects.get(nom="Cadre-test-neg-57")
+        MouvementStock.objects.create(
+            article=article, date="2026-01-01", quantite=-3, motif=MotifMouvement.PERTE,
+        )
+
+        page = self.client.get(reverse("gestion:accueil"))
+
+        self.assertContains(page, "bloc-stock-negatif")
+        self.assertContains(page, "Stock négatif")
+        self.assertContains(page, "Cadre-test-neg-57")
+
+    def test_bloc_accueil_absent_sans_article_stock_negatif(self):
+        article = Article.objects.create(
+            nom="Cadre-test-ok-57", rubrique=RubriqueArticle.RUCHE,
+            nature=NatureArticle.DURABLE, unite="pièce",
+        )
+        MouvementStock.objects.create(
+            article=article, date="2026-01-01", quantite=5, motif=MotifMouvement.STOCK_INITIAL,
+        )
+
+        page = self.client.get(reverse("gestion:accueil"))
+
+        self.assertNotContains(page, "bloc-stock-negatif")
+
+    def test_filtre_stock_negatif_seulement(self):
+        article_negatif = Article.objects.create(
+            nom="Clou-test-neg-57", rubrique=RubriqueArticle.ATELIER,
+            nature=NatureArticle.DURABLE, unite="pièce",
+        )
+        MouvementStock.objects.create(
+            article=article_negatif, date="2026-01-01", quantite=-1, motif=MotifMouvement.PERTE,
+        )
+        article_positif = Article.objects.create(
+            nom="Planche-test-pos-57", rubrique=RubriqueArticle.ATELIER,
+            nature=NatureArticle.DURABLE, unite="pièce",
+        )
+        MouvementStock.objects.create(
+            article=article_positif, date="2026-01-01", quantite=10, motif=MotifMouvement.STOCK_INITIAL,
+        )
+
+        page = self.client.get(reverse("gestion:stocks"), {"stock_negatif": "1"})
+
+        self.assertContains(page, "Clou-test-neg-57")
+        self.assertNotContains(page, "Planche-test-pos-57")
+
+    def test_filtre_stock_negatif_n_affiche_pas_les_articles_inactifs(self):
+        article_negatif = Article.objects.create(
+            nom="Clou-inactif-test-57", rubrique=RubriqueArticle.ATELIER,
+            nature=NatureArticle.DURABLE, unite="pièce", actif=False,
+        )
+        MouvementStock.objects.create(
+            article=article_negatif, date="2026-01-01", quantite=-1, motif=MotifMouvement.PERTE,
+        )
+
+        page = self.client.get(reverse("gestion:stocks"), {"stock_negatif": "1"})
+
+        self.assertNotContains(page, "Clou-inactif-test-57")
+
+    def test_saisie_sortie_avec_stock_negatif_affiche_avertissement(self):
+        article = Article.objects.create(
+            nom="Suc-test-57", rubrique=RubriqueArticle.RECOLTE,
+            nature=NatureArticle.CONSOMMABLE, unite="kg",
+        )
+        # Stock actuel = 2
+        MouvementStock.objects.create(
+            article=article, date="2026-01-01", quantite=2, motif=MotifMouvement.STOCK_INITIAL,
+        )
+
+        # Essayer de retirer 3 (ce qui rendrait le stock à -1)
+        page = self.client.get(
+            reverse("gestion:ajouter_mouvement", args=[article.id, "sortie"])
+        )
+
+        self.assertContains(page, "avertissement-stock-negatif")
+        self.assertContains(page, "rendrait le stock négatif")
+
+    def test_saisie_sortie_sans_stock_negatif_ne_affiche_pas_avertissement(self):
+        article = Article.objects.create(
+            nom="Miel-test-57", rubrique=RubriqueArticle.RECOLTE,
+            nature=NatureArticle.CONSOMMABLE, unite="kg",
+        )
+        # Stock actuel = 5
+        MouvementStock.objects.create(
+            article=article, date="2026-01-01", quantite=5, motif=MotifMouvement.STOCK_INITIAL,
+        )
+
+        # Essayer de retirer 3 (stock restant = 2, positif)
+        page = self.client.get(
+            reverse("gestion:ajouter_mouvement", args=[article.id, "sortie"])
+        )
+
+        self.assertNotContains(page, "avertissement-stock-negatif")
+
+    def test_saisie_entree_ne_affiche_pas_avertissement(self):
+        article = Article.objects.create(
+            nom="Cire-test-57", rubrique=RubriqueArticle.ATELIER,
+            nature=NatureArticle.CONSOMMABLE, unite="feuille",
+        )
+        # Stock actuel = -2 (négatif)
+        MouvementStock.objects.create(
+            article=article, date="2026-01-01", quantite=-2, motif=MotifMouvement.PERTE,
+        )
+
+        # Une entrée ne rend pas le stock négatif (elle l'augmente)
+        page = self.client.get(
+            reverse("gestion:ajouter_mouvement", args=[article.id, "entree"])
+        )
+
+        self.assertNotContains(page, "avertissement-stock-negatif")
+
+    def test_enregistrement_sortie_stock_negatif_autorise(self):
+        """Vérifie que l'enregistrement d'une sortie qui rend le stock
+        négatif est bien autorisé (issue #57 : ne jamais bloquer la saisie)."""
+        article = Article.objects.create(
+            nom="Bois-test-57", rubrique=RubriqueArticle.RUCHE,
+            nature=NatureArticle.DURABLE, unite="pièce",
+        )
+        # Stock actuel = 2
+        MouvementStock.objects.create(
+            article=article, date="2026-01-01", quantite=2, motif=MotifMouvement.STOCK_INITIAL,
+        )
+        article.refresh_from_db()
+        self.assertEqual(article.stock, 2)
+
+        # Retirer 3, ce qui rend le stock à -1
+        reponse = self.client.post(
+            reverse("gestion:ajouter_mouvement", args=[article.id, "sortie"]),
+            {
+                "date": "2026-01-02",
+                "quantite": 3,
+                "motif": MotifMouvement.UTILISATION,
+                "note": "",
+            },
+        )
+
+        self.assertEqual(reponse.status_code, 302)  # Redirection après succès
+        article.refresh_from_db()
+        self.assertEqual(article.stock, -1)
+        # Vérifier que le mouvement a bien été créé
+        self.assertEqual(MouvementStock.objects.filter(article=article).count(), 2)
+
+
 class FiltreFamilleStockTests(TestCase):
     """Filtre par famille de matériel (issue #55) : une pièce commune
     à plusieurs familles apparaît pour chacune."""

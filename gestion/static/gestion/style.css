@@ -344,6 +344,14 @@ dd { margin: 0; }
 .liste-stock-bas { list-style: none; margin: 0; padding: 0; }
 .liste-stock-bas li { padding: 0.3em 0; }
 
+.bloc-stock-negatif {
+    margin: 1.5em 0; padding: 1em; background: var(--fond-tuile);
+    border: 1px solid var(--bordure); border-radius: 8px;
+}
+.bloc-stock-negatif h2 { margin-top: 0; }
+.liste-stock-negatif { list-style: none; margin: 0; padding: 0; }
+.liste-stock-negatif li { padding: 0.3em 0; }
+
 .filtres-stocks {
     display: flex; flex-wrap: wrap; gap: 1em; align-items: center;
     margin-bottom: 1.2em; padding: 0.8em; background: var(--fond-tuile);
@@ -371,6 +379,10 @@ dd { margin: 0; }
     display: inline-block; font-size: 0.78em; padding: 0.15em 0.55em;
     border-radius: 10px; background: #d9534f; color: #fff;
 }
+.badge-stock-negatif {
+    display: inline-block; font-size: 0.78em; padding: 0.15em 0.55em;
+    border-radius: 10px; background: #9c27b0; color: #fff;
+}
 
 .boutons-article { display: flex; gap: 0.5em; flex-wrap: wrap; }
 .bouton-stock {
@@ -379,6 +391,11 @@ dd { margin: 0; }
     background: var(--fond-tuile); color: var(--texte); text-decoration: none;
 }
 .bouton-stock-sens { font-weight: bold; font-size: 1.2em; padding: 0.4em 0.8em; min-width: 2.2em; text-align: center; }
+
+.avertissement-stock-negatif {
+    background: #ffc107; color: #000; padding: 0.8em; border-radius: 8px;
+    margin: 1em 0; border-left: 4px solid #9c27b0;
+}
 
 .bouton-catalogue-depart {
     display: inline-block; margin-top: 1em; padding: 0.7em 1.2em;
