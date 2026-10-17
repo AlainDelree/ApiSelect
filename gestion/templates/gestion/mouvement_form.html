@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% if sens == "entree" %}Entrée{% else %}Sortie{% endif %} de stock — {{ article.nom }} — ApiSelect</title>
     <link rel="stylesheet" href="{% static 'gestion/style.css' %}">
+    <script src="{% static 'gestion/mouvement_form.js' %}"></script>
 </head>
 <body{% if BASE_DE_TEST_ACTIVE %} class="avec-bandeau"{% endif %}>
     {% if BASE_DE_TEST_ACTIVE %}
@@ -16,9 +17,6 @@
 
     <h1>{% if sens == "entree" %}Entrée de stock{% else %}Sortie de stock{% endif %} — {{ article.nom }}</h1>
     <p>Stock actuel : {{ article.stock }} {{ article.unite }}</p>
-    {% if sens == "sortie" and futur_stock_negatif %}
-    <p class="avertissement-stock-negatif">⚠️ Ce mouvement rendrait le stock négatif. L'enregistrement reste possible, mais une correction d'inventaire sera nécessaire.</p>
-    {% endif %}
 
     <form method="post">
         {% csrf_token %}

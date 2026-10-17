@@ -671,45 +671,41 @@ def ajouter_mouvement(request, article_id, sens):
     """Panneau ouvert depuis le bouton « − » ou « + » de la page
     « Stocks » (issue #55) : quantité (1 par défaut), motif proposé
     selon le bouton (modifiable), date, note facultative. Pour une
-    sortie, un avertissement est affiché si le mouvement rendrait le
-    stock négatif — sans bloquer l'enregistrement (issue #57)."""
+    sortie, un avertissement est affiché par JavaScript pendant la
+    saisie si le mouvement rendrait le stock négatif — sans bloquer
+    l'enregistrement (issue #59)."""
     if sens not in ("entree", "sortie"):
         raise Http404
     article = get_object_or_404(Article, pk=article_id)
     motif_defaut = MotifMouvement.ACHAT if sens == "entree" else MotifMouvement.UTILISATION
 
-    futur_stock_negatif = False
     if request.method == "POST":
         form = MouvementForm(request.POST)
         if form.is_valid():
             quantite = form.cleaned_data["quantite"]
             if sens == "sortie":
                 quantite = -quantite
-                futur_stock_negatif = (article.stock + quantite) < 0
             mouvement = form.save(commit=False)
             mouvement.article = article
             mouvement.quantite = quantite
             mouvement.save()
             return redirect("gestion:stocks")
-        # Formulaire invalide : calculer l'avertissement avec la quantité soumise
-        elif form.is_bound:
-            try:
-                quantite = form.cleaned_data.get("quantite") or float(request.POST.get("quantite", 1))
-                if sens == "sortie":
-                    futur_stock_negatif = (article.stock - quantite) < 0
-            except (ValueError, TypeError):
-                pass
+        # Formulaire invalide : réafficher sans calcul d'avertissement
+        # (l'avertissement est géré côté client)
+        form = MouvementForm(request.POST)
     else:
-        # Calculer l'avertissement basé sur la quantité par défaut (1)
-        if sens == "sortie":
-            futur_stock_negatif = (article.stock - 1) < 0
         form = MouvementForm(initial={
             "date": timezone.localdate(), "quantite": 1, "motif": motif_defaut,
         })
+    
+    # Ajouter le data attribute pour le stock actuel (utilisé par le JS)
+    if form.fields["quantite"].widget.attrs:
+        form.fields["quantite"].widget.attrs.update({"data-stock-actuel": article.stock})
+    else:
+        form.fields["quantite"].widget.attrs = {"data-stock-actuel": article.stock}
 
     return render(request, "gestion/mouvement_form.html", {
         "article": article, "form": form, "sens": sens,
-        "futur_stock_negatif": futur_stock_negatif,
     })
 
 

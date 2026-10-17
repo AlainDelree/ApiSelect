@@ -2494,9 +2494,12 @@ class StockNegatifTests(TestCase):
 
         self.assertNotContains(page, "Clou-inactif-test-57")
 
-    def test_saisie_sortie_avec_stock_negatif_affiche_avertissement(self):
+    def test_saisie_sortie_charge_script_et_donnees(self):
+        """L'avertissement est géré côté client : vérifier que le script
+        et les données nécessaires sont présents pour une sortie
+        (issue #59)."""
         article = Article.objects.create(
-            nom="Suc-test-57", rubrique=RubriqueArticle.RECOLTE,
+            nom="Suc-test-59", rubrique=RubriqueArticle.RECOLTE,
             nature=NatureArticle.CONSOMMABLE, unite="kg",
         )
         # Stock actuel = 2
@@ -2504,34 +2507,43 @@ class StockNegatifTests(TestCase):
             article=article, date="2026-01-01", quantite=2, motif=MotifMouvement.STOCK_INITIAL,
         )
 
-        # Essayer de retirer 3 (ce qui rendrait le stock à -1)
         page = self.client.get(
             reverse("gestion:ajouter_mouvement", args=[article.id, "sortie"])
         )
 
-        self.assertContains(page, "avertissement-stock-negatif")
-        self.assertContains(page, "rendrait le stock négatif")
-
-    def test_saisie_sortie_sans_stock_negatif_ne_affiche_pas_avertissement(self):
-        article = Article.objects.create(
-            nom="Miel-test-57", rubrique=RubriqueArticle.RECOLTE,
-            nature=NatureArticle.CONSOMMABLE, unite="kg",
-        )
-        # Stock actuel = 5
-        MouvementStock.objects.create(
-            article=article, date="2026-01-01", quantite=5, motif=MotifMouvement.STOCK_INITIAL,
-        )
-
-        # Essayer de retirer 3 (stock restant = 2, positif)
-        page = self.client.get(
-            reverse("gestion:ajouter_mouvement", args=[article.id, "sortie"])
-        )
-
+        # Vérifier que le script est chargé
+        self.assertContains(page, "mouvement_form.js")
+        # Vérifier que le data attribute contient le stock actuel
+        self.assertContains(page, 'data-stock-actuel="2"')
+        # L'élément d'avertissement n'est PAS dans le HTML statique
+        # (il sera créé par JS si nécessaire)
         self.assertNotContains(page, "avertissement-stock-negatif")
 
-    def test_saisie_entree_ne_affiche_pas_avertissement(self):
+    def test_saisie_sortie_stock_zero_charge_script(self):
+        """Vérifier que le script et les données sont présents pour un
+        article à stock 0 (issue #59)."""
         article = Article.objects.create(
-            nom="Cire-test-57", rubrique=RubriqueArticle.ATELIER,
+            nom="Miel-test-59-zero", rubrique=RubriqueArticle.RECOLTE,
+            nature=NatureArticle.CONSOMMABLE, unite="kg",
+        )
+        # Stock actuel = 0
+
+        page = self.client.get(
+            reverse("gestion:ajouter_mouvement", args=[article.id, "sortie"])
+        )
+
+        # Vérifier que le script est chargé
+        self.assertContains(page, "mouvement_form.js")
+        # Vérifier que le data attribute contient le stock actuel
+        self.assertContains(page, 'data-stock-actuel="0"')
+        # L'élément d'avertissement n'est PAS dans le HTML statique
+        self.assertNotContains(page, "avertissement-stock-negatif")
+
+    def test_saisie_entree_charge_script_sans_avertissement(self):
+        """Pour une entrée, le script est chargé mais l'avertissement
+        ne s'affiche jamais (pas de vérification côté JS pour les entrées)."""
+        article = Article.objects.create(
+            nom="Cire-test-59", rubrique=RubriqueArticle.ATELIER,
             nature=NatureArticle.CONSOMMABLE, unite="feuille",
         )
         # Stock actuel = -2 (négatif)
@@ -2539,11 +2551,15 @@ class StockNegatifTests(TestCase):
             article=article, date="2026-01-01", quantite=-2, motif=MotifMouvement.PERTE,
         )
 
-        # Une entrée ne rend pas le stock négatif (elle l'augmente)
         page = self.client.get(
             reverse("gestion:ajouter_mouvement", args=[article.id, "entree"])
         )
 
+        # Le script est chargé (pour uniformité, même si non utilisé)
+        self.assertContains(page, "mouvement_form.js")
+        # Le data attribute est présent
+        self.assertContains(page, 'data-stock-actuel="-2"')
+        # L'élément d'avertissement n'est PAS présent (pas de sortie)
         self.assertNotContains(page, "avertissement-stock-negatif")
 
     def test_enregistrement_sortie_stock_negatif_autorise(self):
