@@ -14,7 +14,13 @@
   d'Alain seul : CCL ne tente jamais de s'y connecter ni de le
   deviner, ni de lancer `--prod` ou `--migrer`.
 - Tests : `python manage.py test selection gestion`. Vérification
-  manuelle : jamais remplir ni purger la base de test.
+  manuelle : jamais remplir ni purger la base de test. Les tests
+  doivent être lancés depuis l'environnement virtuel du dépôt
+  principal : `source ~/ApiSelect/venv/bin/activate && python manage.py test selection gestion`.
+- Chaque issue dépose un fichier `CHANGELOG-<N>.md` à la racine, qui
+  sera fusionné dans `CHANGELOG.md`. Convention : titre de niveau 2
+  (`##`), date en sous-titre (niveau 3), entrées les plus récentes en
+  tête, structure homogène.
 - Aucun `git push` : Alain pousse après relecture.
 
 ## Périmètre : deux parties, dépendance à sens unique
@@ -66,6 +72,25 @@ Picking(+4j)→Garnir Apidea(+14j)→Contrôle ponte/grille(+25j) ;
 `CelluleRoyale` (issue #25, 4 statuts), lien vers `Reine` seulement si
 devenue reine. Diagnostic (`/diagnostic/`, issue #32) :
 `selection/diagnostics.py`, liste `VERIFICATIONS`.
+
+## Stocks
+Le volet stocks signale désormais les stocks négatifs selon le principe
+**informer, jamais bloquer** : une sortie supérieure au stock disponible
+reste enregistrable ; le stock négatif est un symptôme à corriger par
+un inventaire, pas une saisie à refuser. Aucun contrôle n'est placé
+dans la sauvegarde du modèle, afin que les corrections d'inventaire, les
+chargements de catalogue et les migrations ne soient jamais entravés.
+
+Signalement :
+- Sur chaque article concerné (badge violet distinct du badge de stock bas)
+- Sur la page des stocks (filtre "Stock négatif seulement")
+- Sur la page d'accueil (bloc dédié, comme pour les stocks bas)
+- Pendant la saisie d'une sortie (avertissement dynamique côté navigateur)
+
+L'avertissement à la saisie est géré côté navigateur, le stock étant
+transmis à la page, car un avertissement qui n'empêche pas l'enregistrement
+ne peut pas être produit par le serveur, qui ne connaît la quantité
+qu'une fois l'opération faite.
 
 ## État des migrations et d'avancement
 `apiselect_dev` à jour. Sur `apiselect` : 0010-0014 appliquées,
