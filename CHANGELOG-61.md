@@ -1,4 +1,6 @@
-# Issue #61 — Mettre à jour CONTEXTE.md après le signalement des stocks négatifs
+## Issue #61 — Mettre à jour CONTEXTE.md après le signalement des stocks négatifs
+
+### 17 octobre 2026
 
 ## Modifications
 
