@@ -699,10 +699,11 @@ def ajouter_mouvement(request, article_id, sens):
         })
     
     # Ajouter le data attribute pour le stock actuel (utilisé par le JS)
+    stock_normalise = str(article.stock.normalize())
     if form.fields["quantite"].widget.attrs:
-        form.fields["quantite"].widget.attrs.update({"data-stock-actuel": article.stock})
+        form.fields["quantite"].widget.attrs.update({"data-stock-actuel": stock_normalise})
     else:
-        form.fields["quantite"].widget.attrs = {"data-stock-actuel": article.stock}
+        form.fields["quantite"].widget.attrs = {"data-stock-actuel": stock_normalise}
 
     return render(request, "gestion/mouvement_form.html", {
         "article": article, "form": form, "sens": sens,
