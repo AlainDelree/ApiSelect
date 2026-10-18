@@ -2309,6 +2309,46 @@ class StockBasTests(TestCase):
 
         self.assertNotContains(page, "badge-stock-bas")
 
+    def test_propriete_stock_bas_faux_quand_stock_egal_au_seuil(self):
+        """Frontière : un article dont le stock est exactement égal à son
+        seuil n'est PAS considéré comme en stock bas (issue #62)."""
+        article = Article.objects.create(
+            nom="Test-egal-seuil-62", rubrique=RubriqueArticle.ATELIER,
+            nature=NatureArticle.DURABLE, unite="pièce", seuil_alerte=10,
+        )
+        MouvementStock.objects.create(
+            article=article, date="2026-01-01", quantite=10,
+            motif=MotifMouvement.STOCK_INITIAL,
+        )
+        article.refresh_from_db()
+
+        self.assertFalse(article.stock_bas)
+
+    def test_propriete_stock_bas_faux_sans_seuil_quel_que_soit_le_stock(self):
+        """Un article sans seuil d'alerte n'est JAMAIS en stock bas,
+        quel que soit son stock (issue #62)."""
+        article = Article.objects.create(
+            nom="Test-sans-seuil-62", rubrique=RubriqueArticle.ATELIER,
+            nature=NatureArticle.DURABLE, unite="pièce",
+        )
+        # Même avec un stock de 0
+        MouvementStock.objects.create(
+            article=article, date="2026-01-01", quantite=0,
+            motif=MotifMouvement.STOCK_INITIAL,
+        )
+        article.refresh_from_db()
+
+        self.assertFalse(article.stock_bas)
+        
+        # Même avec un stock négatif
+        MouvementStock.objects.create(
+            article=article, date="2026-01-02", quantite=-5,
+            motif=MotifMouvement.PERTE,
+        )
+        article.refresh_from_db()
+
+        self.assertFalse(article.stock_bas)
+
     def test_bloc_accueil_present_sous_le_seuil(self):
         Article.objects.create(
             nom="Pot-test-bas-55", rubrique=RubriqueArticle.RECOLTE,
@@ -2873,3 +2913,96 @@ class AdminStocksTests(TestCase):
                 reverse("admin:gestion_article_change", args=[article.id]),
             ).status_code, 200,
         )
+
+
+class ValidationQuantiteFormulairesTests(TestCase):
+    """Validation des quantités dans les formulaires de mouvement et de
+    correction d'inventaire (issue #62) : quantité nulle ou négative
+    refusée, quantité positive acceptée."""
+
+    def setUp(self):
+        self.article = Article.objects.create(
+            nom="Test-validation-62", rubrique=RubriqueArticle.ATELIER,
+            nature=NatureArticle.DURABLE, unite="pièce",
+        )
+        MouvementStock.objects.create(
+            article=self.article, date="2026-01-01", quantite=10,
+            motif=MotifMouvement.STOCK_INITIAL,
+        )
+
+    def test_mouvement_form_quantite_nulle_rejetee(self):
+        """Une quantité nulle dans un mouvement est rejetée (issue #62)."""
+        from .forms import MouvementForm
+
+        form = MouvementForm(data={
+            "date": "2026-01-02", "quantite": "0",
+            "motif": MotifMouvement.UTILISATION, "note": "",
+        })
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("quantite", form.errors)
+
+    def test_mouvement_form_quantite_negative_rejetee(self):
+        """Une quantité négative dans un mouvement est rejetée (issue #62)."""
+        from .forms import MouvementForm
+
+        form = MouvementForm(data={
+            "date": "2026-01-02", "quantite": "-5",
+            "motif": MotifMouvement.UTILISATION, "note": "",
+        })
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("quantite", form.errors)
+
+    def test_mouvement_form_quantite_positive_acceptée(self):
+        """Une quantité positive dans un mouvement est acceptée (issue #62)."""
+        from .forms import MouvementForm
+
+        form = MouvementForm(data={
+            "date": "2026-01-02", "quantite": "5",
+            "motif": MotifMouvement.UTILISATION, "note": "",
+        })
+
+        self.assertTrue(form.is_valid())
+
+    def test_mouvement_form_quantite_minimale_acceptée(self):
+        """La quantité minimale positive (0.01) est acceptée (issue #62)."""
+        from .forms import MouvementForm
+
+        form = MouvementForm(data={
+            "date": "2026-01-02", "quantite": "0.01",
+            "motif": MotifMouvement.UTILISATION, "note": "",
+        })
+
+        self.assertTrue(form.is_valid())
+
+    def test_correction_form_quantite_comptee_nulle_acceptée(self):
+        """Une quantité comptée nulle est acceptée (issue #62)."""
+        from .forms import CorrectionStockForm
+
+        form = CorrectionStockForm(data={
+            "quantite_comptee": "0", "date": "2026-01-02", "note": "",
+        })
+
+        self.assertTrue(form.is_valid())
+
+    def test_correction_form_quantite_comptee_negative_rejetée(self):
+        """Une quantité comptée négative est rejetée (issue #62)."""
+        from .forms import CorrectionStockForm
+
+        form = CorrectionStockForm(data={
+            "quantite_comptee": "-5", "date": "2026-01-02", "note": "",
+        })
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("quantite_comptee", form.errors)
+
+    def test_correction_form_quantite_comptee_positive_acceptée(self):
+        """Une quantité comptée positive est acceptée (issue #62)."""
+        from .forms import CorrectionStockForm
+
+        form = CorrectionStockForm(data={
+            "quantite_comptee": "15", "date": "2026-01-02", "note": "",
+        })
+
+        self.assertTrue(form.is_valid())
